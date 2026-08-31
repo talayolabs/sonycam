@@ -2,6 +2,7 @@
 //
 // Exit codes: 0 = ok, 1 = camera/daemon error, 2 = usage, 3 = daemon unreachable.
 
+#include <fcntl.h>
 #include <libgen.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -72,11 +73,28 @@ std::string daemonBinary(const char* argv0) {
     return dir + "/sonycamd";
 }
 
+std::string daemonLogPath(const std::string& socketPath) {
+    return socketPath + ".log";
+}
+
 int spawnDaemon(const std::string& bin, const std::string& socketPath, bool fake) {
     pid_t pid = ::fork();
     if (pid < 0) return -1;
     if (pid == 0) {
         ::setsid();
+        // Detach from the client's stdio: inherited pipes would never see
+        // EOF while the daemon lives. Keep stderr in a log for debugging.
+        int devnull = ::open("/dev/null", O_RDWR);
+        int log = ::open(daemonLogPath(socketPath).c_str(),
+                         O_WRONLY | O_CREAT | O_APPEND, 0600);
+        if (devnull >= 0) {
+            ::dup2(devnull, STDIN_FILENO);
+            ::dup2(devnull, STDOUT_FILENO);
+        }
+        if (log >= 0 || devnull >= 0)
+            ::dup2(log >= 0 ? log : devnull, STDERR_FILENO);
+        if (devnull > STDERR_FILENO) ::close(devnull);
+        if (log > STDERR_FILENO) ::close(log);
         std::vector<const char*> args{bin.c_str(), "--socket", socketPath.c_str()};
         if (fake) args.push_back("--fake");
         args.push_back(nullptr);
@@ -221,8 +239,9 @@ int main(int argc, char** argv) {
             fd = connectSocket(socketPath);
         }
         if (fd < 0) {
-            std::fprintf(stderr, "error: daemon did not start (socket %s)\n",
-                         socketPath.c_str());
+            std::fprintf(stderr,
+                         "error: daemon did not start (socket %s); see %s\n",
+                         socketPath.c_str(), daemonLogPath(socketPath).c_str());
             return 3;
         }
         // Freshly started daemon: establish the camera connection first.

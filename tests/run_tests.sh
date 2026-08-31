@@ -107,5 +107,19 @@ export SONYCAM_SOCKET="$WORK/path.sock"
 PATH="$(dirname "$SONYCAM"):$PATH" check "auto-start via PATH lookup" "$(basename "$SONYCAM")" status
 PATH="$(dirname "$SONYCAM"):$PATH" check "daemon stop (PATH)" "$(basename "$SONYCAM")" daemon stop
 
+# --- cold-start output must be pipe-safe (daemon must not inherit stdio) ---
+# The perl wrapper aborts after 10s so a regression fails instead of hanging.
+export SONYCAM_SOCKET="$WORK/pipe.sock"
+check_output "cold start piped to an EOF-reader completes" \
+  "connected: yes" \
+  perl -e 'alarm 10; print qx($ARGV[0] status | cat | head -1)' "$SONYCAM"
+check "daemon stop (pipe test 1)" "$SONYCAM" daemon stop
+check_output "cold start emits only client output (no daemon stderr)" \
+  "connected: yes
+model:     FAKE ILCE-7CM2
+transport: fake" \
+  perl -e 'alarm 10; print qx($ARGV[0] status 2>&1)' "$SONYCAM"
+check "daemon stop (pipe test 2)" "$SONYCAM" daemon stop
+
 echo "passed: $PASS, failed: $FAIL"
 [ "$FAIL" -eq 0 ]

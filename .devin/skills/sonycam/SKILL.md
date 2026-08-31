@@ -41,18 +41,18 @@ Add `--json` for machine-readable output. Exit codes: 0 ok, 1 camera error,
 
 ## Session start: run this ONCE before anything else
 
-Run these three commands in order, bare (no pipes, no `$(...)`), and build a
-mental model of the hardware before taking any other action:
+Run these three commands in order and build a mental model of the hardware
+before taking any other action:
 
 ```
-sonycam status      # 1. warm up the daemon + confirm the camera is connected
+sonycam status      # 1. start the daemon + confirm the camera is connected
 sonycam info        # 2. identify the gear
 sonycam props       # 3. learn current mode and what is writable right now
 ```
 
-Never pipe or capture the output of step 1: on a cold start the auto-spawned
-daemon inherits the pipe and the command hangs forever. After step 1
-completes, piping and `--json` are safe.
+The first command pays a ~6s daemon-spawn + connect cost; everything after
+is instant. The daemon logs to `<socket>.log` (default `~/.sonycam.sock.log`)
+— read it when the daemon misbehaves.
 
 Interpret the results and remember them for the whole session:
 

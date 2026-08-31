@@ -132,16 +132,15 @@ dialog already appeared, you can alternatively approve it under
 **macOS steals the camera (`ptpcamerad`)** — macOS launches `ptpcamerad`
 for any imaging USB device and it grabs the PTP session before the SDK can.
 `sonycamd` handles this automatically during connect: it suppresses
-`ptpcamerad` and force re-enumerates the Sony USB device. The startup line
+`ptpcamerad` and force re-enumerates the Sony USB device. The log line
 `sonycamd: re-enumerated 1 Sony USB device(s)` is normal, not an error.
 
 **First command is slow (~6 s)** — expected: it spawns the daemon and pays
 the SDK connect cost once. Subsequent commands are instant.
 
-**First command hangs forever when piped** — known bug: on a cold start the
-auto-spawned daemon inherits the client's pipe, so `sonycam status | head`
-or `$(sonycam --json props)` never sees EOF. Workaround: run a bare
-`sonycam status` first, then pipe freely.
+**Where did the daemon output go?** — the auto-spawned daemon logs to
+`<socket>.log` next to its unix socket (default `~/.sonycam.sock.log`).
+Check it when the daemon fails to start or behaves oddly.
 
 **`capture` times out ("no image arrived")** — two causes, both camera-side:
 - The mode dial is in a movie/S&Q position (`props` shows a hex
@@ -195,8 +194,6 @@ Reference material (not dependencies): [crsdk.app property docs](https://crsdk.a
   FE 24-70mm F2.8 GM II over USB on Apple Silicon macOS. Full round trip
   works: connect, props, get/set (incl. aperture with the lens ring on "A"),
   capture with image download, live view, gear identification.
-- Known bug: the auto-spawned daemon inherits the client's stdio, so the
-  *first* command after a cold start hangs if piped (see Troubleshooting).
 - Not exposed yet (SDK supports them): remote focus drive, power-zoom
   control, movie record start/stop, file format selection.
 - Value codecs for shutter/ISO/EV follow the SDK header conventions; exact
