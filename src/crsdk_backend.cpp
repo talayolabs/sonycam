@@ -153,13 +153,21 @@ struct EnumEntry {
 
 const EnumEntry kWhiteBalance[] = {
     {"auto", SCRSDK::CrWhiteBalance_AWB},
+    {"underwater_auto", SCRSDK::CrWhiteBalance_Underwater_Auto},
     {"daylight", SCRSDK::CrWhiteBalance_Daylight},
     {"shadow", SCRSDK::CrWhiteBalance_Shadow},
     {"cloudy", SCRSDK::CrWhiteBalance_Cloudy},
     {"tungsten", SCRSDK::CrWhiteBalance_Tungsten},
     {"fluorescent", SCRSDK::CrWhiteBalance_Fluorescent},
+    {"fluorescent_warm_white", SCRSDK::CrWhiteBalance_Fluorescent_WarmWhite},
+    {"fluorescent_cool_white", SCRSDK::CrWhiteBalance_Fluorescent_CoolWhite},
+    {"fluorescent_day_white", SCRSDK::CrWhiteBalance_Fluorescent_DayWhite},
+    {"fluorescent_daylight", SCRSDK::CrWhiteBalance_Fluorescent_Daylight},
     {"flash", SCRSDK::CrWhiteBalance_Flush},
     {"color_temp", SCRSDK::CrWhiteBalance_ColorTemp},
+    {"custom_1", SCRSDK::CrWhiteBalance_Custom_1},
+    {"custom_2", SCRSDK::CrWhiteBalance_Custom_2},
+    {"custom_3", SCRSDK::CrWhiteBalance_Custom_3},
     {"custom", SCRSDK::CrWhiteBalance_Custom},
 };
 
@@ -188,13 +196,46 @@ const EnumEntry kExposureProgram[] = {
     {"program_auto", SCRSDK::CrExposure_P_Auto},
     {"aperture_priority", SCRSDK::CrExposure_A_AperturePriority},
     {"shutter_priority", SCRSDK::CrExposure_S_ShutterSpeedPriority},
+    {"portrait", SCRSDK::CrExposure_Portrait},
     {"auto", SCRSDK::CrExposure_Auto},
+    {"auto_plus", SCRSDK::CrExposure_Auto_Plus},
+    {"sports_action", SCRSDK::CrExposure_Sports_Action},
+    {"sunset", SCRSDK::CrExposure_Sunset},
+    {"night", SCRSDK::CrExposure_Night},
+    {"landscape", SCRSDK::CrExposure_Landscape},
+    {"macro", SCRSDK::CrExposure_Macro},
+    {"handheld_twilight", SCRSDK::CrExposure_HandheldTwilight},
+    {"night_portrait", SCRSDK::CrExposure_NightPortrait},
+    {"anti_motion_blur", SCRSDK::CrExposure_AntiMotionBlur},
+    {"movie_p", SCRSDK::CrExposure_Movie_P},
+    {"movie_a", SCRSDK::CrExposure_Movie_A},
+    {"movie_s", SCRSDK::CrExposure_Movie_S},
+    {"movie_m", SCRSDK::CrExposure_Movie_M},
+    {"movie_auto", SCRSDK::CrExposure_Movie_Auto},
+    {"movie_f", SCRSDK::CrExposure_Movie_F},
+    {"sq_p", SCRSDK::CrExposure_Movie_SQMotion_P},
+    {"sq_a", SCRSDK::CrExposure_Movie_SQMotion_A},
+    {"sq_s", SCRSDK::CrExposure_Movie_SQMotion_S},
+    {"sq_m", SCRSDK::CrExposure_Movie_SQMotion_M},
+    {"sq_auto", SCRSDK::CrExposure_Movie_SQMotion_AUTO},
+    {"sq_f", SCRSDK::CrExposure_Movie_SQMotion_F},
+    {"interval_f", SCRSDK::CrExposure_Movie_IntervalRec_F},
+    {"interval_p", SCRSDK::CrExposure_Movie_IntervalRec_P},
+    {"interval_a", SCRSDK::CrExposure_Movie_IntervalRec_A},
+    {"interval_s", SCRSDK::CrExposure_Movie_IntervalRec_S},
+    {"interval_m", SCRSDK::CrExposure_Movie_IntervalRec_M},
+    {"interval_auto", SCRSDK::CrExposure_Movie_IntervalRec_AUTO},
 };
 
 const EnumEntry kDriveMode[] = {
     {"single", SCRSDK::CrDrive_Single},
+    {"continuous_hi_plus", SCRSDK::CrDrive_Continuous_Hi_Plus},
     {"continuous_hi", SCRSDK::CrDrive_Continuous_Hi},
+    {"continuous_mid", SCRSDK::CrDrive_Continuous_Mid},
     {"continuous_lo", SCRSDK::CrDrive_Continuous_Lo},
+    {"continuous", SCRSDK::CrDrive_Continuous},
+    {"focus_bracket", SCRSDK::CrDrive_FocusBracket},
+    {"timelapse", SCRSDK::CrDrive_Timelapse},
     {"timer_2s", SCRSDK::CrDrive_Timer_2s},
     {"timer_5s", SCRSDK::CrDrive_Timer_5s},
     {"timer_10s", SCRSDK::CrDrive_Timer_10s},
@@ -208,6 +249,7 @@ const EnumEntry kPriorityKey[] = {
 std::string enumToString(const EnumEntry* table, size_t n, std::uint64_t v) {
     for (size_t i = 0; i < n; ++i)
         if (table[i].value == v) return table[i].name;
+    if (v == 0xffffffffull) return "-";  // camera reports "no value" sentinel
     char buf[32];
     std::snprintf(buf, sizeof(buf), "0x%llx", static_cast<unsigned long long>(v));
     return buf;
@@ -435,6 +477,23 @@ std::string crErrorString(CrError e) {
     return buf;
 }
 
+std::string focusIndicationName(std::uint64_t v) {
+    switch (v) {
+        case SCRSDK::CrFocusIndicator_Unlocked: return "unlocked";
+        case SCRSDK::CrFocusIndicator_Focused_AF_S:
+        case SCRSDK::CrFocusIndicator_Focused_AF_C: return "focused";
+        case SCRSDK::CrFocusIndicator_NotFocused_AF_S:
+        case SCRSDK::CrFocusIndicator_NotFocused_AF_C: return "not_focused";
+        case SCRSDK::CrFocusIndicator_TrackingSubject_AF_C: return "tracking";
+        default: {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "0x%llx",
+                          static_cast<unsigned long long>(v));
+            return buf;
+        }
+    }
+}
+
 class CrsdkBackend : public CameraBackend {
 public:
     ~CrsdkBackend() override {
@@ -614,22 +673,35 @@ public:
         if (!valueFromString(*def, value, raw))
             return Result::fail("cannot parse value '" + value + "' for " + name);
 
+        // The camera reports everything as read-only for a couple of seconds
+        // after a capture or mode change, so poll before giving up.
         CrDeviceProperty* current = nullptr;
         CrInt32 num = 0;
         CrInt32u code = def->code;
-        CrError err = SCRSDK::GetSelectDeviceProperties(
-            handle_, 1, &code, &current, &num);
-        if (err != SCRSDK::CrError_None || num == 0 || !current) {
-            if (current) SCRSDK::ReleaseDeviceProperties(handle_, current);
-            return Result::fail("cannot read " + name + " before writing: " +
-                                crErrorString(err));
+        SCRSDK::CrDataType valueType{};
+        bool writable = false;
+        for (int i = 0; i < 13; ++i) {
+            if (i) std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            CrError rerr = SCRSDK::GetSelectDeviceProperties(
+                handle_, 1, &code, &current, &num);
+            if (rerr != SCRSDK::CrError_None || num == 0 || !current) {
+                if (current) SCRSDK::ReleaseDeviceProperties(handle_, current);
+                current = nullptr;
+                if (i == 0)
+                    return Result::fail("cannot read " + name +
+                                        " before writing: " + crErrorString(rerr));
+                continue;
+            }
+            valueType = current[0].GetValueType();
+            writable = current[0].IsSetEnableCurrentValue();
+            SCRSDK::ReleaseDeviceProperties(handle_, current);
+            current = nullptr;
+            if (writable) break;
         }
-        SCRSDK::CrDataType valueType = current[0].GetValueType();
-        bool writable = current[0].IsSetEnableCurrentValue();
-        SCRSDK::ReleaseDeviceProperties(handle_, current);
         if (!writable)
             return Result::fail(name +
                                 " is not writable in the current camera mode");
+        CrError err;
 
         CrDeviceProperty prop;
         prop.SetCode(def->code);
@@ -654,6 +726,90 @@ public:
             }
         }
         return Result::fail("camera did not apply " + name + "=" + value);
+    }
+
+    Result focus(const std::string& op, int steps,
+                 std::string& outStatus) override {
+        if (handle_ == 0) return Result::fail("not connected");
+
+        if (op == "status") {
+            std::uint64_t v = 0;
+            if (!readNumericProp(SCRSDK::CrDeviceProperty_FocusIndication, v))
+                return Result::fail("focus indication not available");
+            outStatus = focusIndicationName(v);
+            return Result::success();
+        }
+
+        if (op == "af") {
+            CrDeviceProperty s1;
+            s1.SetCode(SCRSDK::CrDeviceProperty_S1);
+            s1.SetValueType(SCRSDK::CrDataType_UInt16);
+            s1.SetCurrentValue(SCRSDK::CrLockIndicator_Locked);
+            CrError err = SCRSDK::SetDeviceProperty(handle_, &s1);
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("AF half-press failed: " + crErrorString(err));
+
+            std::string state = "unknown";
+            bool locked = false;
+            for (int i = 0; i < 50; ++i) {  // up to 5s
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                std::uint64_t v = 0;
+                if (!readNumericProp(SCRSDK::CrDeviceProperty_FocusIndication, v))
+                    continue;
+                state = focusIndicationName(v);
+                if (state == "focused" || state == "tracking") {
+                    locked = true;
+                    break;
+                }
+            }
+            s1.SetCurrentValue(SCRSDK::CrLockIndicator_Unlocked);
+            SCRSDK::SetDeviceProperty(handle_, &s1);
+            outStatus = state;
+            if (!locked)
+                return Result::fail(
+                    "autofocus did not lock (" + state +
+                    "); try more light, a different focus_area, or focus_mode "
+                    "mf with 'focus near/far'");
+            return Result::success();
+        }
+
+        if (op == "near" || op == "far") {
+            CrDeviceProperty* props = nullptr;
+            CrInt32 num = 0;
+            CrInt32u code = SCRSDK::CrDeviceProperty_NearFar;
+            CrError err = SCRSDK::GetSelectDeviceProperties(
+                handle_, 1, &code, &props, &num);
+            if (err != SCRSDK::CrError_None || num == 0 || !props) {
+                if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
+                return Result::fail("manual focus drive not available: " +
+                                    crErrorString(err));
+            }
+            SCRSDK::CrDataType valueType = props[0].GetValueType();
+            bool writable = props[0].IsSetEnableCurrentValue();
+            SCRSDK::ReleaseDeviceProperties(handle_, props);
+            if (!writable)
+                return Result::fail(
+                    "focus nudge requires focus_mode mf (set focus_mode mf)");
+
+            const std::int16_t step = (op == "near")
+                                          ? SCRSDK::CrPropValueMinus1
+                                          : SCRSDK::CrPropValuePlus1;
+            for (int i = 0; i < steps; ++i) {
+                CrDeviceProperty p;
+                p.SetCode(code);
+                p.SetValueType(valueType);
+                p.SetCurrentValue(static_cast<std::uint16_t>(step));
+                err = SCRSDK::SetDeviceProperty(handle_, &p);
+                if (err != SCRSDK::CrError_None)
+                    return Result::fail("focus nudge failed: " +
+                                        crErrorString(err));
+                std::this_thread::sleep_for(std::chrono::milliseconds(150));
+            }
+            outStatus = op + " x" + std::to_string(steps);
+            return Result::success();
+        }
+
+        return Result::fail("unknown focus op: " + op);
     }
 
     Result capture(const std::string& saveDir, std::string& outFile) override {

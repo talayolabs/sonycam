@@ -34,6 +34,9 @@ const char kUsage[] =
     "  props                      list all supported properties with values\n"
     "  get <prop>                 read one property (e.g. iso, aperture)\n"
     "  set <prop> <value>         write one property (e.g. set iso 800)\n"
+    "  focus af                   autofocus (half-press), waits for lock\n"
+    "  focus near|far [N]         manual-focus nudge N steps (needs focus_mode mf)\n"
+    "  focus status               current focus indication\n"
     "  capture [--dir DIR]        trigger the shutter\n"
     "  liveview <out.jpg>         save one live-view frame\n"
     "  connect | disconnect       manage the camera connection\n"
@@ -161,6 +164,8 @@ int printResult(const std::string& cmd, const json& resp, bool jsonOut) {
                     result.value("connected", false) ? "yes" : "no",
                     result.value("model", "-").c_str(),
                     result.value("transport", "-").c_str());
+    } else if (cmd == "focus") {
+        std::printf("focus: %s\n", result.value("status", "").c_str());
     } else if (cmd == "capture") {
         std::string f = result.value("file", "");
         std::printf("captured%s%s\n", f.empty() ? "" : ": ", f.c_str());
@@ -203,6 +208,20 @@ int main(int argc, char** argv) {
     } else if (cmd == "set") {
         if (args.size() != 3) { std::fprintf(stderr, "usage: sonycam set <prop> <value>\n"); return 2; }
         req = {{"cmd", "set"}, {"prop", args[1]}, {"value", args[2]}};
+    } else if (cmd == "focus") {
+        if (args.size() < 2 || args.size() > 3) {
+            std::fprintf(stderr, "usage: sonycam focus af|near|far|status [steps]\n");
+            return 2;
+        }
+        int steps = 1;
+        if (args.size() == 3) {
+            try { steps = std::stoi(args[2]); } catch (...) { steps = 0; }
+            if (steps < 1 || steps > 100) {
+                std::fprintf(stderr, "steps must be 1-100\n");
+                return 2;
+            }
+        }
+        req = {{"cmd", "focus"}, {"op", args[1]}, {"steps", steps}};
     } else if (cmd == "capture") {
         req = {{"cmd", "capture"}};
         for (size_t i = 1; i + 1 < args.size(); ++i)

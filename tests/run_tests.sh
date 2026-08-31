@@ -94,6 +94,17 @@ check "nested capture wrote a jpg" ls "$WORK"/new/nested/DSC00002.JPG
 check "liveview" "$SONYCAM" liveview "$WORK/frame.jpg"
 check "liveview wrote a jpg" test -s "$WORK/frame.jpg"
 
+# --- focus control ---
+check "focus status" "$SONYCAM" focus status
+check "set focus_mode af_s" "$SONYCAM" set focus_mode af_s
+check_output "focus af locks in AF mode" "focus: focused" "$SONYCAM" focus af
+check_fails "focus near refused in AF mode" "$SONYCAM" focus near
+check "set focus_mode mf" "$SONYCAM" set focus_mode mf
+check_output "focus near nudges in MF mode" "focus: near x3" "$SONYCAM" focus near 3
+check_fails "focus af refused in MF mode" "$SONYCAM" focus af
+check_fails "focus rejects bad op" "$SONYCAM" focus sideways
+check "restore focus_mode af_s" "$SONYCAM" set focus_mode af_s
+
 # --- priority key gate ---
 check "set priority_key camera" "$SONYCAM" set priority_key camera
 check_fails "capture refused without pc_remote" "$SONYCAM" capture --dir "$WORK"

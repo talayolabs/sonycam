@@ -47,6 +47,12 @@ public:
     virtual Result getProp(const std::string& name, PropInfo& out) = 0;
     virtual Result setProp(const std::string& name, const std::string& value) = 0;
 
+    // Focus control. op: "af" (half-press, wait for lock, release),
+    // "near"/"far" (manual-focus nudges, `steps` times), "status" (read the
+    // focus indication). `outStatus` reports the resulting focus state.
+    virtual Result focus(const std::string& op, int steps,
+                         std::string& outStatus) = 0;
+
     // Trigger the shutter. On success `outFile` may contain a downloaded
     // file path if the backend saves images locally (empty otherwise).
     virtual Result capture(const std::string& saveDir, std::string& outFile) = 0;

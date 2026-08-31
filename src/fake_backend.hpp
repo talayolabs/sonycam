@@ -21,6 +21,7 @@ public:
     Result getProp(const std::string& name, PropInfo& out) override;
     Result setProp(const std::string& name, const std::string& value) override;
 
+    Result focus(const std::string& op, int steps, std::string& outStatus) override;
     Result capture(const std::string& saveDir, std::string& outFile) override;
     Result liveviewFrame(const std::string& path) override;
 

@@ -143,6 +143,29 @@ Result FakeBackend::setProp(const std::string& name, const std::string& value) {
     return Result::success();
 }
 
+Result FakeBackend::focus(const std::string& op, int steps, std::string& outStatus) {
+    if (!connected_) return Result::fail("not connected");
+    const std::string mode = props_["focus_mode"].value;
+    if (op == "status") {
+        outStatus = "unlocked";
+        return Result::success();
+    }
+    if (op == "af") {
+        if (mode == "mf")
+            return Result::fail("autofocus requires an AF focus mode (current: mf)");
+        outStatus = "focused";
+        return Result::success();
+    }
+    if (op == "near" || op == "far") {
+        if (mode != "mf")
+            return Result::fail("focus nudge requires focus_mode mf (current: " +
+                                mode + ")");
+        outStatus = op + " x" + std::to_string(steps);
+        return Result::success();
+    }
+    return Result::fail("unknown focus op: " + op);
+}
+
 Result FakeBackend::capture(const std::string& saveDir, std::string& outFile) {
     if (!connected_) return Result::fail("not connected");
     if (props_["priority_key"].value != "pc_remote")

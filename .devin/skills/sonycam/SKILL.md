@@ -27,6 +27,9 @@ sonycam info                      identify gear: body/lens model, serials, firmw
 sonycam props                     all properties with values (+ per-mode writability)
 sonycam get <prop>                one property, includes valid choices
 sonycam set <prop> <value>        change a property, verifies the camera applied it
+sonycam focus af                  autofocus (half-press), waits for lock, reports state
+sonycam focus near|far [N]        manual-focus nudge N steps (requires focus_mode mf)
+sonycam focus status              current focus indication (unlocked/focused/tracking)
 sonycam capture [--dir DIR]       fire the shutter, downloads the image, prints its path
 sonycam liveview <out.jpg>        save one live-view frame (fast, no shutter)
 sonycam connect | disconnect      manage the camera connection
@@ -65,12 +68,12 @@ Interpret the results and remember them for the whole session:
     mode where it should be writable (A or M) → the ring is off its "A"
     position; ask the user to turn the ring to "A" (check the Iris Lock
     switch). No software action can fix this.
-- **`props` → exposure_program**: a hex value like `0x8053` means the
-  physical dial is in a movie/S&Q position. `capture` needs a still mode:
-  run `sonycam set exposure_program manual` (or `aperture_priority`, ...).
-  This override is per-connection — it silently reverts to the dial whenever
-  the daemon reconnects, so re-run the check after any disconnect, daemon
-  restart, or USB replug.
+- **`props` → exposure_program**: a movie/S&Q value (`movie_m`, `sq_auto`,
+  ...) means the physical dial is in a movie position. `capture` needs a
+  still mode: run `sonycam set exposure_program manual` (or
+  `aperture_priority`, ...). This override is per-connection — it silently
+  reverts to the dial whenever the daemon reconnects, so re-run the check
+  after any disconnect, daemon restart, or USB replug.
 - **`props` → `(read-only)` markers** are per-mode, not permanent. Re-read
   after changing exposure_program.
 
@@ -79,14 +82,13 @@ so hardware limitations are understood by everyone.
 
 ## Critical rules during operation
 
-1. **Autofocus can block the shutter.** In af_c/af_s with low light or low
-   contrast, the camera refuses to release and capture fails with a timeout.
-   Fall back to `sonycam set focus_mode mf` and retry.
+1. **Focus before you shoot.** Run `sonycam focus af` first: it half-presses,
+   waits for lock, and tells you the outcome. If it fails (low light / low
+   contrast), switch to `set focus_mode mf` and use `focus near/far [N]` with
+   liveview frames to focus by eye. A capture attempted with unlocked AF
+   fails with a timeout. `focus af` only locks in still modes.
 
-2. **Wait ~3s after a capture** before setting properties; the camera
-   briefly reports everything as "not writable" while it stores the shot.
-
-3. **Restore what you change.** If you override exposure_program, focus_mode
+2. **Restore what you change.** If you override exposure_program, focus_mode
    etc. to get a shot, put the user's original values back afterwards
    (record them from the session-start `props` output).
 
@@ -104,9 +106,10 @@ so hardware limitations are understood by everyone.
 | focus_area | `wide`, `zone`, `center`, `spot_m`, `expand_spot` |
 
 `get <prop>` always prints the exact `choices:` accepted by the current
-camera — trust that list over this table. Values the CLI cannot name are
-shown as hex (e.g. `0x8053` = movie-manual); you can pass raw hex back to
-`set` to select them.
+camera — trust that list over this table. Movie/S&Q exposure programs are
+named (`movie_m`, `sq_auto`, `interval_p`, ...). `-` means the camera
+reports no value in the current mode. Rare values the CLI cannot name are
+shown as hex and can be passed back to `set` verbatim.
 
 ## Troubleshooting
 
@@ -118,7 +121,10 @@ shown as hex (e.g. `0x8053` = movie-manual); you can pass raw hex back to
   whether it has an aperture ring.
 - `remote_zoom no` in `sonycam info`: the lens has a mechanical zoom ring
   that cannot be driven remotely; only power-zoom (PZ) lenses support it.
-- `drive_mode 0xffffffff`: normal in movie modes; switch to a still mode.
+- `drive_mode -` (read-only): normal in movie modes; switch to a still mode.
+- `focus af` fails with "did not lock": add light, aim at higher contrast,
+  try `set focus_area center`, or fall back to mf + `focus near/far` while
+  checking liveview frames.
 - Stuck or weird daemon state: `sonycam daemon stop`, then retry (next
   command restarts it).
 - No hardware attached: use `sonycam --fake <cmd>` for a simulated camera
@@ -128,9 +134,12 @@ shown as hex (e.g. `0x8053` = movie-manual); you can pass raw hex back to
 
 ```
 sonycam status && sonycam info && sonycam props   # session start (see above)
-sonycam set exposure_program manual               # only if in a movie/hex mode
+sonycam set exposure_program manual               # only if in a movie/sq mode
+sonycam focus af                                  # verify focus before shooting
 sonycam capture --dir ./shots                     # captured: ./shots/DSC0xxxx.JPG
-# on "no image arrived" timeout:
-sonycam set focus_mode mf && sonycam capture --dir ./shots
+# if focus af failed to lock:
+sonycam set focus_mode mf
+sonycam focus near 10                             # + liveview to check by eye
+sonycam capture --dir ./shots
 # afterwards, restore the user's original settings recorded at session start
 ```

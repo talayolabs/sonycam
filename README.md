@@ -17,6 +17,8 @@ sonycam set iso 800
 sonycam set aperture 2.8
 sonycam set shutter_speed 1/250
 sonycam set white_balance daylight
+sonycam focus af                  # autofocus, waits for lock
+sonycam focus near 5              # manual-focus nudge (focus_mode mf)
 sonycam capture --dir ~/photos    # trigger the shutter
 sonycam liveview frame.jpg        # save one live-view frame
 sonycam --json props              # machine-readable output for agents
@@ -143,23 +145,20 @@ the SDK connect cost once. Subsequent commands are instant.
 Check it when the daemon fails to start or behaves oddly.
 
 **`capture` times out ("no image arrived")** — two causes, both camera-side:
-- The mode dial is in a movie/S&Q position (`props` shows a hex
-  `exposure_program` such as `0x8053`). Fix: `sonycam set exposure_program
+- The mode dial is in a movie/S&Q position (`props` shows an
+  `exposure_program` like `movie_m`). Fix: `sonycam set exposure_program
   manual`. This override reverts to the physical dial on every reconnect.
 - Autofocus can't lock (af_c/af_s in low light) so the camera refuses to
-  release. Fix: `sonycam set focus_mode mf` and retry.
+  release. Check with `sonycam focus af` first; fall back to
+  `sonycam set focus_mode mf` plus `sonycam focus near/far` and retry.
 
 **`aperture is not writable in the current camera mode`** — in A/M modes
 this means the lens's physical aperture ring is not on its "A" position
 (check the Iris Lock switch too). Run `sonycam info` to identify the lens.
 No software fix exists; turn the ring.
 
-**`drive_mode 0xffffffff` / read-only exposure_comp** — normal in movie
-modes; the camera genuinely doesn't expose them there. Switch to a still
-mode.
-
-**Sets fail right after a capture** — the camera locks all properties for
-~2–3 s while it stores the shot. Wait and retry.
+**`drive_mode -` / read-only exposure_comp** — normal in movie modes; the
+camera genuinely doesn't expose them there. Switch to a still mode.
 
 **Stuck or weird daemon state** — `sonycam daemon stop`, then run any
 command to restart it. Settings changed remotely (exposure_program, etc.)
@@ -194,8 +193,8 @@ Reference material (not dependencies): [crsdk.app property docs](https://crsdk.a
   FE 24-70mm F2.8 GM II over USB on Apple Silicon macOS. Full round trip
   works: connect, props, get/set (incl. aperture with the lens ring on "A"),
   capture with image download, live view, gear identification.
-- Not exposed yet (SDK supports them): remote focus drive, power-zoom
-  control, movie record start/stop, file format selection.
+- Not exposed yet (SDK supports them): power-zoom control, movie record
+  start/stop, file format selection, absolute focus positioning.
 - Value codecs for shutter/ISO/EV follow the SDK header conventions; exact
   accepted values depend on the camera mode (e.g. aperture is not writable
   in S mode, most exposure props are locked in full Auto).

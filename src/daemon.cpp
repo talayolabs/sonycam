@@ -83,6 +83,10 @@ json handle(CameraBackend& cam, const json& req, bool& shutdown) {
             if (cam.getProp(req.value("prop", ""), p).ok)
                 resp["result"] = propToJson(p);
         }
+    } else if (cmd == "focus") {
+        std::string status;
+        r = cam.focus(req.value("op", ""), req.value("steps", 1), status);
+        if (r.ok) resp["result"] = {{"status", status}};
     } else if (cmd == "capture") {
         std::string outFile;
         r = cam.capture(req.value("dir", ""), outFile);

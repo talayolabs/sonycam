@@ -8,15 +8,12 @@ M = an afternoon, L = larger.
 
 | # | Item | Effort | Why |
 |---|------|--------|-----|
-| 1 | **Remote focus control** — `sonycam focus` (AF half-press trigger, MF near/far nudges via SDK focus operation) | M | AF-block is the #1 capture failure; today the only remedy is switching to `mf` blind. Lets agents focus deliberately. |
 | 2 | **Movie record start/stop** — `sonycam record start\|stop` | S-M | The camera's dial lives in movie mode; the CLI can't do the one thing that mode is for. SDK: `CrCommandId_MovieRecord`. |
 
 ## P1 — robustness & agent ergonomics
 
 | # | Item | Effort | Why |
 |---|------|--------|-----|
-| 3 | **Name remaining enum values** — movie/S&Q exposure programs (`0x8053` → `movie_manual`), extra WB modes, `0xffffffff` → `-` | S | Agents currently juggle raw hex; error-prone. |
-| 4 | **Busy-retry on transient "not writable"** — after capture/mode change the camera locks props ~2-3s; `set` should retry briefly instead of erroring | S | Removes the "wait ~3s" footgun from the skill. |
 | 5 | **USB unplug/replug recovery** — verify daemon behavior on `OnDisconnected`, auto-reconnect on next command | M | Untested path; needs physical cable pull (requires user). |
 | 6 | **Readiness wait after mode change** — replace capture's blind 3x release retry with polling a readiness signal if one exists | M | Current retry works but is a heuristic. |
 
@@ -40,6 +37,12 @@ M = an afternoon, L = larger.
 | 15 | **`cmake --install` target / packaging** — put `sonycam`+`sonycamd` on PATH properly | S | Currently run from `build/`. |
 
 ## Done (this effort)
+
+- #1 Remote focus control: `focus af` (S1 half-press + FocusIndication
+  wait), `focus near/far [N]` MF nudges, `focus status`
+- #3 Named enum values: movie/S&Q/interval exposure programs, scene modes,
+  fluorescent/custom WB, more drive modes, `0xffffffff` → `-`
+- #4 Busy-retry in `set` during post-capture/mode-change property locks
 
 - Real-SDK build on macOS (layout detection, dylib staging, Gatekeeper docs)
 - ptpcamerad suppression + USB re-enumeration workaround
