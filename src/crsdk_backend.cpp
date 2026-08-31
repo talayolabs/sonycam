@@ -374,6 +374,12 @@ public:
         lastError_ = error;
         cv_.notify_all();
     }
+    void OnCompleteDownload(CrChar* filename, CrInt32u) override {
+        std::lock_guard<std::mutex> lk(m_);
+        downloadedFile_ = filename ? reinterpret_cast<const char*>(filename) : "";
+        downloadDone_ = true;
+        cv_.notify_all();
+    }
 
     bool waitConnected(int timeoutSec) {
         std::unique_lock<std::mutex> lk(m_);
@@ -399,6 +405,19 @@ public:
         std::lock_guard<std::mutex> lk(m_);
         return connected_;
     }
+    void armDownload() {
+        std::lock_guard<std::mutex> lk(m_);
+        downloadDone_ = false;
+        downloadedFile_.clear();
+    }
+    bool waitDownload(int timeoutSec, std::string& file) {
+        std::unique_lock<std::mutex> lk(m_);
+        if (!cv_.wait_for(lk, std::chrono::seconds(timeoutSec),
+                          [&] { return downloadDone_; }))
+            return false;
+        file = downloadedFile_;
+        return true;
+    }
 
 private:
     std::mutex m_;
@@ -406,6 +425,8 @@ private:
     bool connected_ = false;
     CrInt32u lastError_ = 0;
     CrInt32u disconnectReason_ = 0;
+    bool downloadDone_ = false;
+    std::string downloadedFile_;
 };
 
 std::string crErrorString(CrError e) {
@@ -613,23 +634,37 @@ public:
 
     Result capture(const std::string& saveDir, std::string& outFile) override {
         if (handle_ == 0) return Result::fail("not connected");
-        if (!saveDir.empty()) {
-            std::error_code ec;
-            std::filesystem::create_directories(saveDir, ec);
-            if (ec) return Result::fail("cannot create " + saveDir + ": " + ec.message());
-            SCRSDK::SetSaveInfo(handle_,
-                                const_cast<CrChar*>(saveDir.c_str()),
-                                const_cast<CrChar*>(""), -1);
+        std::string dir = saveDir.empty() ? std::string(".") : saveDir;
+        std::error_code ec;
+        std::filesystem::create_directories(dir, ec);
+        if (ec) return Result::fail("cannot create " + dir + ": " + ec.message());
+        dir = std::filesystem::absolute(dir, ec).string();
+        SCRSDK::SetSaveInfo(handle_,
+                            const_cast<CrChar*>(dir.c_str()),
+                            const_cast<CrChar*>(""), -1);
+
+        // The camera only transfers the shot when the still image store
+        // destination includes the host PC.
+        Result dest = ensureHostPcStoreDestination();
+        if (!dest.ok) return dest;
+
+        // The camera silently drops the release while it settles after a mode
+        // change, so retry until an image actually arrives.
+        callback_.armDownload();
+        for (int attempt = 0; attempt < 3; ++attempt) {
+            CrError err = SCRSDK::SendCommand(
+                handle_, SCRSDK::CrCommandId_Release, SCRSDK::CrCommandParam_Down);
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("shutter down failed: " + crErrorString(err));
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            SCRSDK::SendCommand(handle_, SCRSDK::CrCommandId_Release,
+                                SCRSDK::CrCommandParam_Up);
+            if (callback_.waitDownload(10, outFile)) return Result::success();
         }
-        CrError err = SCRSDK::SendCommand(handle_, SCRSDK::CrCommandId_Release,
-                                          SCRSDK::CrCommandParam_Down);
-        if (err != SCRSDK::CrError_None)
-            return Result::fail("shutter down failed: " + crErrorString(err));
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        SCRSDK::SendCommand(handle_, SCRSDK::CrCommandId_Release,
-                            SCRSDK::CrCommandParam_Up);
-        outFile.clear();  // download arrives asynchronously via OnCompleteDownload
-        return Result::success();
+        return Result::fail(
+            "shutter released but no image arrived: the camera may not be in "
+            "a still-image mode, or autofocus could not lock and blocked the "
+            "release (try 'set focus_mode mf')");
     }
 
     Result liveviewFrame(const std::string& path) override {
@@ -662,6 +697,57 @@ public:
     }
 
 private:
+    Result ensureHostPcStoreDestination() {
+        CrDeviceProperty* props = nullptr;
+        CrInt32 num = 0;
+        CrInt32u code = SCRSDK::CrDeviceProperty_StillImageStoreDestination;
+        CrError err = SCRSDK::GetSelectDeviceProperties(
+            handle_, 1, &code, &props, &num);
+        if (err != SCRSDK::CrError_None || num == 0 || !props) {
+            if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
+            return Result::success();  // property unsupported: nothing to do
+        }
+        std::uint64_t current = props[0].GetCurrentValue();
+        bool writable = props[0].IsSetEnableCurrentValue();
+        SCRSDK::CrDataType valueType = props[0].GetValueType();
+        SCRSDK::ReleaseDeviceProperties(handle_, props);
+        if (current == SCRSDK::CrStillImageStoreDestination_HostPC ||
+            current == SCRSDK::CrStillImageStoreDestination_HostPCAndMemoryCard)
+            return Result::success();
+        if (!writable)
+            return Result::fail(
+                "camera saves stills to the memory card only and the store "
+                "destination is not writable in the current mode");
+
+        CrDeviceProperty prop;
+        prop.SetCode(code);
+        prop.SetValueType(valueType);
+        prop.SetCurrentValue(
+            SCRSDK::CrStillImageStoreDestination_HostPCAndMemoryCard);
+        err = SCRSDK::SetDeviceProperty(handle_, &prop);
+        if (err != SCRSDK::CrError_None)
+            return Result::fail("cannot set still image store destination: " +
+                                crErrorString(err));
+        for (int i = 0; i < 30; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            props = nullptr;
+            num = 0;
+            err = SCRSDK::GetSelectDeviceProperties(
+                handle_, 1, &code, &props, &num);
+            if (err == SCRSDK::CrError_None && num > 0 && props) {
+                bool applied =
+                    props[0].GetCurrentValue() ==
+                    SCRSDK::CrStillImageStoreDestination_HostPCAndMemoryCard;
+                SCRSDK::ReleaseDeviceProperties(handle_, props);
+                if (applied) return Result::success();
+            } else if (props) {
+                SCRSDK::ReleaseDeviceProperties(handle_, props);
+            }
+        }
+        return Result::fail(
+            "camera did not switch the still image store destination to PC");
+    }
+
     std::vector<std::string> readChoices(const PropDef& def,
                                          CrDeviceProperty& prop) {
         std::vector<std::string> out;
