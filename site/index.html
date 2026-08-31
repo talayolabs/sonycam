@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>sonycam — talk to your Sony camera from the terminal</title>
+<meta name="description" content="Agent-friendly CLI for Sony cameras built directly on the official Camera Remote SDK.">
+<script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
+<style>
+  :root {
+    --bg: #0b0e14;
+    --panel: #131824;
+    --text: #e6e9f0;
+    --muted: #8b93a7;
+    --accent: #ff7a18;
+    --accent2: #4da3ff;
+    --mono: "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.6; overflow-x: hidden;
+  }
+  section { max-width: 960px; margin: 0 auto; padding: 96px 24px; }
+  h1 { font-size: clamp(2.2rem, 6vw, 4rem); line-height: 1.1; }
+  h2 { font-size: clamp(1.5rem, 4vw, 2.2rem); margin-bottom: 24px; }
+  .hero { min-height: 88vh; display: flex; flex-direction: column; justify-content: center; }
+  .hero .tag {
+    color: var(--accent); font-family: var(--mono); font-size: .95rem;
+    letter-spacing: .12em; text-transform: uppercase; margin-bottom: 16px;
+  }
+  .hero p.sub { color: var(--muted); font-size: 1.25rem; max-width: 620px; margin-top: 20px; }
+  .hero .cta { margin-top: 36px; display: flex; gap: 16px; flex-wrap: wrap; }
+  a.btn {
+    display: inline-block; padding: 12px 26px; border-radius: 8px; text-decoration: none;
+    font-weight: 600; transition: transform .2s ease, box-shadow .2s ease;
+  }
+  a.btn:hover { transform: translateY(-2px); }
+  .btn-primary { background: var(--accent); color: #10131a; }
+  .btn-ghost { border: 1px solid #2a3247; color: var(--text); }
+  .term {
+    background: var(--panel); border: 1px solid #222b3d; border-radius: 12px;
+    padding: 24px; font-family: var(--mono); font-size: .95rem; margin-top: 42px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.45);
+  }
+  .term .line { white-space: pre-wrap; }
+  .term .p { color: var(--accent2); }
+  .term .out { color: var(--muted); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+  .card {
+    background: var(--panel); border: 1px solid #222b3d; border-radius: 12px; padding: 28px;
+  }
+  .card h3 { margin-bottom: 10px; font-size: 1.1rem; }
+  .card p { color: var(--muted); font-size: .95rem; }
+  .card .ico { font-size: 1.6rem; margin-bottom: 14px; display: block; }
+  video { width: 100%; border-radius: 12px; border: 1px solid #222b3d; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+  footer { text-align: center; color: var(--muted); padding: 48px 24px; font-size: .9rem; }
+  footer a { color: var(--accent2); }
+
+  /* scroll animations */
+  .reveal { opacity: 0; transform: translateY(36px); transition: opacity .8s ease, transform .8s ease; }
+  .reveal.visible { opacity: 1; transform: none; }
+  .reveal.from-left { transform: translateX(-48px); }
+  .reveal.from-right { transform: translateX(48px); }
+  .reveal.from-left.visible, .reveal.from-right.visible { transform: none; }
+  .stagger > * { opacity: 0; transform: translateY(28px); transition: opacity .7s ease, transform .7s ease; }
+  .stagger.visible > * { opacity: 1; transform: none; }
+  .stagger.visible > *:nth-child(2) { transition-delay: .15s; }
+  .stagger.visible > *:nth-child(3) { transition-delay: .3s; }
+  .stagger.visible > *:nth-child(4) { transition-delay: .45s; }
+  @media (prefers-reduced-motion: reduce) {
+    .reveal, .stagger > * { opacity: 1 !important; transform: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <section class="hero">
+    <div class="tag reveal" v-reveal>talayolabs / sonycam</div>
+    <h1 class="reveal" v-reveal>Talk to your Sony camera<br>from the terminal.</h1>
+    <p class="sub reveal" v-reveal>An agent-friendly CLI built directly on the official Sony Camera Remote SDK.
+      Set ISO, aperture and shutter, fire the shutter, grab live-view frames — from your shell,
+      your scripts, or your AI agent.</p>
+    <div class="cta reveal" v-reveal>
+      <a class="btn btn-primary" href="https://github.com/talayolabs/sonycam">View on GitHub</a>
+      <a class="btn btn-ghost" href="#demo">Watch the demo</a>
+    </div>
+    <div class="term reveal" v-reveal>
+      <div class="line"><span class="p">$</span> sonycam set iso 800 &amp;&amp; sonycam set aperture 2.8</div>
+      <div class="line out">iso&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;800</div>
+      <div class="line out">aperture&nbsp;&nbsp;&nbsp;2.8</div>
+      <div class="line"><span class="p">$</span> sonycam capture --dir ~/photos</div>
+      <div class="line out">captured: ~/photos/DSC00001.JPG</div>
+    </div>
+  </section>
+
+  <section id="demo">
+    <h2 class="reveal from-left" v-reveal>See it in action</h2>
+    <p class="reveal from-left" v-reveal style="color:var(--muted); margin-bottom: 28px;">
+      Live walkthrough against the built-in fake camera backend — daemon auto-start, property
+      get/set, JSON output, error handling, capture, live view, and the full integration suite.</p>
+    <video class="reveal" v-reveal controls preload="metadata" src="demo.mp4"></video>
+  </section>
+
+  <section>
+    <h2 class="reveal from-right" v-reveal>Why sonycam</h2>
+    <div class="grid stagger" v-reveal>
+      <div class="card" v-for="f in features" :key="f.title">
+        <span class="ico">{{ f.icon }}</span>
+        <h3>{{ f.title }}</h3>
+        <p>{{ f.text }}</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="reveal from-left" v-reveal>Built for agents</h2>
+    <div class="term reveal" v-reveal>
+      <div class="line"><span class="p">$</span> sonycam --json get iso</div>
+      <div class="line out">{"ok":true,"result":{"name":"iso","value":"800","writable":true,</div>
+      <div class="line out">&nbsp;"choices":["auto","100","200","400","800","1600","3200", …]}}</div>
+    </div>
+    <p class="reveal" v-reveal style="color:var(--muted); margin-top: 24px;">
+      Stable JSON output, meaningful exit codes, and a <code style="font-family:var(--mono)">--help</code>
+      that doubles as a tool schema. Any agent that can run shell commands can drive your camera.</p>
+  </section>
+
+  <footer class="reveal" v-reveal>
+    <a href="https://github.com/talayolabs/sonycam">github.com/talayolabs/sonycam</a>
+    · built on the official Sony Camera Remote SDK · not affiliated with Sony
+  </footer>
+
+</div>
+
+<script>
+const { createApp } = Vue;
+
+createApp({
+  data() {
+    return {
+      features: [
+        { icon: "\u26a1", title: "One-shot commands, warm connection",
+          text: "A background daemon keeps the camera connection open, so every CLI call is instant — no multi-second SDK reconnect per command." },
+        { icon: "\ud83d\udcf7", title: "Official SDK, no wrappers",
+          text: "Talks straight to Sony's Camera Remote SDK. No community middle layers, no REST servers, no compatibility shims." },
+        { icon: "\ud83e\udd16", title: "Agent-first design",
+          text: "--json output, clean exit codes, and human-readable values like 1/250 and f/2.8. Made to be driven by AI agents and scripts." },
+        { icon: "\ud83e\uddea", title: "Develops without a camera",
+          text: "A stateful fake backend simulates the camera end-to-end, so tests and CI run anywhere — hardware only needed for the final smoke test." },
+      ],
+    };
+  },
+  directives: {
+    reveal: {
+      mounted(el) {
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add("visible");
+              io.unobserve(e.target);
+            }
+          });
+        }, { threshold: 0.15 });
+        io.observe(el);
+      },
+    },
+  },
+}).mount("#app");
+</script>
+</body>
+</html>
