@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Integration tests: CLI <-> daemon protocol against the fake backend.
+# Usage: tests/run_tests.sh /path/to/sonycam
+set -u
+
+SONYCAM="${1:?usage: run_tests.sh /path/to/sonycam}"
+WORK="$(mktemp -d)"
+export SONYCAM_SOCKET="$WORK/test.sock"
+export SONYCAM_FAKE=1
+
+PASS=0
+FAIL=0
+
+cleanup() {
+  "$SONYCAM" daemon stop >/dev/null 2>&1
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+check() {
+  local desc="$1"; shift
+  if "$@" >/dev/null 2>&1; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL: $desc  ($*)" >&2
+  fi
+}
+
+check_fails() {
+  local desc="$1"; shift
+  if "$@" >/dev/null 2>&1; then
+    FAIL=$((FAIL + 1))
+    echo "FAIL (expected error): $desc  ($*)" >&2
+  else
+    PASS=$((PASS + 1))
+  fi
+}
+
+check_output() {
+  local desc="$1" expected="$2"; shift 2
+  local out
+  out="$("$@" 2>/dev/null)"
+  if [ "$out" = "$expected" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL: $desc  (got: '$out', want: '$expected')" >&2
+  fi
+}
+
+# --- basic lifecycle (first command auto-starts the daemon) ---
+check "status" "$SONYCAM" status
+check "props lists properties" "$SONYCAM" props
+check "connect is idempotent" "$SONYCAM" connect
+
+# --- get/set round trips ---
+check "get iso" "$SONYCAM" get iso
+check "set iso 800" "$SONYCAM" set iso 800
+check_output "iso persisted across invocations" \
+  '{"ok":true,"result":{"name":"iso","value":"800"}}' \
+  python3 -c "
+import json, subprocess, sys
+out = subprocess.run(['$SONYCAM', '--json', 'get', 'iso'],
+                     capture_output=True, text=True).stdout
+d = json.loads(out)
+d['result'] = {'name': d['result']['name'], 'value': d['result']['value']}
+print(json.dumps({'ok': d['ok'], 'result': d['result']}, separators=(',', ':')))
+"
+check "set aperture 4.0" "$SONYCAM" set aperture 4.0
+check "set shutter_speed 1/250" "$SONYCAM" set shutter_speed 1/250
+check "set white_balance daylight" "$SONYCAM" set white_balance daylight
+check "set exposure_comp (free numeric)" "$SONYCAM" set exposure_comp -0.7
+
+# --- validation errors ---
+check_fails "unknown property rejected" "$SONYCAM" get bogus_prop
+check_fails "invalid enum value rejected" "$SONYCAM" set iso 999
+check_fails "read-only property rejected" "$SONYCAM" set battery_level 50
+check_fails "usage error on missing args" "$SONYCAM" set iso
+
+# --- json output shape ---
+check_output "json error shape" \
+  '{"error":"unknown property: nope","ok":false}' \
+  "$SONYCAM" --json get nope
+
+# --- capture and liveview produce files ---
+check "capture" "$SONYCAM" capture --dir "$WORK"
+check "capture wrote a jpg" ls "$WORK"/DSC00001.JPG
+check "liveview" "$SONYCAM" liveview "$WORK/frame.jpg"
+check "liveview wrote a jpg" test -s "$WORK/frame.jpg"
+
+# --- priority key gate ---
+check "set priority_key camera" "$SONYCAM" set priority_key camera
+check_fails "capture refused without pc_remote" "$SONYCAM" capture --dir "$WORK"
+check "set priority_key pc_remote" "$SONYCAM" set priority_key pc_remote
+
+# --- daemon stop ---
+check "daemon stop" "$SONYCAM" daemon stop
+
+echo "passed: $PASS, failed: $FAIL"
+[ "$FAIL" -eq 0 ]
