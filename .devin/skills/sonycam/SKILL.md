@@ -39,32 +39,56 @@ white_balance focus_mode focus_area drive_mode priority_key`
 Add `--json` for machine-readable output. Exit codes: 0 ok, 1 camera error,
 2 usage, 3 daemon unreachable.
 
-## Critical rules
+## Session start: run this ONCE before anything else
 
-1. **Never pipe or capture the output of the first command after a cold
-   start.** The auto-spawned daemon inherits the pipe and the command hangs
-   forever. Warm up first, then pipe:
-   ```
-   sonycam status          # bare, warms up the daemon
-   sonycam --json props    # now safe to pipe/capture
-   ```
+Run these three commands in order, bare (no pipes, no `$(...)`), and build a
+mental model of the hardware before taking any other action:
 
-2. **Start every session with `sonycam props`** to learn the camera's current
-   mode and which properties are writable. `(read-only)` markers are
-   per-mode, not permanent.
+```
+sonycam status      # 1. warm up the daemon + confirm the camera is connected
+sonycam info        # 2. identify the gear
+sonycam props       # 3. learn current mode and what is writable right now
+```
 
-3. **`capture` requires a still-image mode.** If the physical dial is in a
-   movie position (exposure_program shows a hex like `0x8053`), run
-   `sonycam set exposure_program manual` (or `aperture_priority`, etc.)
-   first. This override resets whenever the daemon reconnects, so re-check
-   after any disconnect or daemon restart.
+Never pipe or capture the output of step 1: on a cold start the auto-spawned
+daemon inherits the pipe and the command hangs forever. After step 1
+completes, piping and `--json` are safe.
 
-4. **Autofocus can block the shutter.** In af_c/af_s with low light or low
+Interpret the results and remember them for the whole session:
+
+- **`info` → lens**: look up whether this lens has a physical aperture ring
+  and note `remote_zoom`. This tells you up front which failures are
+  hardware limits you must not retry:
+  - `remote_zoom no` → zoom is a mechanical ring; never attempt to zoom,
+    ask the user to turn it instead.
+  - Lens has an aperture ring and `props` shows `aperture (read-only)` in a
+    mode where it should be writable (A or M) → the ring is off its "A"
+    position; ask the user to turn the ring to "A" (check the Iris Lock
+    switch). No software action can fix this.
+- **`props` → exposure_program**: a hex value like `0x8053` means the
+  physical dial is in a movie/S&Q position. `capture` needs a still mode:
+  run `sonycam set exposure_program manual` (or `aperture_priority`, ...).
+  This override is per-connection — it silently reverts to the dial whenever
+  the daemon reconnects, so re-run the check after any disconnect, daemon
+  restart, or USB replug.
+- **`props` → `(read-only)` markers** are per-mode, not permanent. Re-read
+  after changing exposure_program.
+
+Report the identified gear (body, lens, firmware) to the user at the start
+so hardware limitations are understood by everyone.
+
+## Critical rules during operation
+
+1. **Autofocus can block the shutter.** In af_c/af_s with low light or low
    contrast, the camera refuses to release and capture fails with a timeout.
    Fall back to `sonycam set focus_mode mf` and retry.
 
-5. **Wait ~3s after a capture** before setting properties; the camera
+2. **Wait ~3s after a capture** before setting properties; the camera
    briefly reports everything as "not writable" while it stores the shot.
+
+3. **Restore what you change.** If you override exposure_program, focus_mode
+   etc. to get a shot, put the user's original values back afterwards
+   (record them from the session-start `props` output).
 
 ## Value formats
 
@@ -103,10 +127,10 @@ shown as hex (e.g. `0x8053` = movie-manual); you can pass raw hex back to
 ## Example: take a photo, whatever state the camera is in
 
 ```
-sonycam status                              # warm up + verify connection
-sonycam props                               # inspect mode
-sonycam set exposure_program manual         # only if in a movie/hex mode
-sonycam capture --dir ./shots               # prints: captured: ./shots/DSC0xxxx.JPG
+sonycam status && sonycam info && sonycam props   # session start (see above)
+sonycam set exposure_program manual               # only if in a movie/hex mode
+sonycam capture --dir ./shots                     # captured: ./shots/DSC0xxxx.JPG
 # on "no image arrived" timeout:
 sonycam set focus_mode mf && sonycam capture --dir ./shots
+# afterwards, restore the user's original settings recorded at session start
 ```
