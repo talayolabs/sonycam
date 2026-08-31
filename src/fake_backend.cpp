@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
+#include <system_error>
 
 namespace sonycam {
 
@@ -134,9 +136,13 @@ Result FakeBackend::capture(const std::string& saveDir, std::string& outFile) {
     if (!connected_) return Result::fail("not connected");
     if (props_["priority_key"].value != "pc_remote")
         return Result::fail("priority key is not pc_remote; camera refuses remote release");
+    std::string dir = saveDir.empty() ? std::string(".") : saveDir;
+    std::error_code ec;
+    std::filesystem::create_directories(dir, ec);
+    if (ec) return Result::fail("cannot create " + dir + ": " + ec.message());
     char buf[64];
     std::snprintf(buf, sizeof(buf), "/DSC%05d.JPG", ++captureCount_);
-    outFile = (saveDir.empty() ? std::string(".") : saveDir) + buf;
+    outFile = dir + buf;
     std::ofstream f(outFile, std::ios::binary);
     if (!f) return Result::fail("cannot write " + outFile);
     f.write(reinterpret_cast<const char*>(kTinyJpeg), sizeof(kTinyJpeg));

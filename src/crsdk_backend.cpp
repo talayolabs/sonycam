@@ -18,8 +18,10 @@ std::unique_ptr<CameraBackend> makeCrsdkBackend(std::string& error) {
 #include <condition_variable>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <system_error>
 #include <thread>
 #include <vector>
 
@@ -403,6 +405,9 @@ public:
     Result capture(const std::string& saveDir, std::string& outFile) override {
         if (handle_ == 0) return Result::fail("not connected");
         if (!saveDir.empty()) {
+            std::error_code ec;
+            std::filesystem::create_directories(saveDir, ec);
+            if (ec) return Result::fail("cannot create " + saveDir + ": " + ec.message());
             SCRSDK::SetSaveInfo(handle_,
                                 const_cast<CrChar*>(saveDir.c_str()),
                                 const_cast<CrChar*>(""), -1);

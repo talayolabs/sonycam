@@ -65,6 +65,7 @@ int connectSocket(const std::string& path) {
 }
 
 std::string daemonBinary(const char* argv0) {
+    if (!std::strchr(argv0, '/')) return "sonycamd";  // found via PATH
     std::vector<char> buf(argv0, argv0 + std::strlen(argv0) + 1);
     std::string dir = ::dirname(buf.data());
     return dir + "/sonycamd";

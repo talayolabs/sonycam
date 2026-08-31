@@ -86,6 +86,8 @@ check_output "json error shape" \
 # --- capture and liveview produce files ---
 check "capture" "$SONYCAM" capture --dir "$WORK"
 check "capture wrote a jpg" ls "$WORK"/DSC00001.JPG
+check "capture creates missing save dir" "$SONYCAM" capture --dir "$WORK/new/nested"
+check "nested capture wrote a jpg" ls "$WORK"/new/nested/DSC00002.JPG
 check "liveview" "$SONYCAM" liveview "$WORK/frame.jpg"
 check "liveview wrote a jpg" test -s "$WORK/frame.jpg"
 
@@ -96,6 +98,11 @@ check "set priority_key pc_remote" "$SONYCAM" set priority_key pc_remote
 
 # --- daemon stop ---
 check "daemon stop" "$SONYCAM" daemon stop
+
+# --- auto-start works when invoked via PATH (bare command name) ---
+export SONYCAM_SOCKET="$WORK/path.sock"
+PATH="$(dirname "$SONYCAM"):$PATH" check "auto-start via PATH lookup" "$(basename "$SONYCAM")" status
+PATH="$(dirname "$SONYCAM"):$PATH" check "daemon stop (PATH)" "$(basename "$SONYCAM")" daemon stop
 
 echo "passed: $PASS, failed: $FAIL"
 [ "$FAIL" -eq 0 ]
