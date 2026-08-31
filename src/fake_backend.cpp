@@ -100,6 +100,17 @@ CameraInfo FakeBackend::info() {
     return ci;
 }
 
+Result FakeBackend::gearInfo(std::vector<PropInfo>& out) {
+    if (!connected_) return Result::fail("not connected");
+    out.push_back(PropInfo{"model", "FAKE ILCE-7CM2", false, {}});
+    out.push_back(PropInfo{"body_serial", "0000001", false, {}});
+    out.push_back(PropInfo{"body_firmware", "9.99", false, {}});
+    out.push_back(PropInfo{"lens", "FAKE FE 28-70mm F3.5-5.6 OSS", false, {}});
+    out.push_back(PropInfo{"lens_firmware", "01", false, {}});
+    out.push_back(PropInfo{"remote_zoom", "no", false, {}});
+    return Result::success();
+}
+
 Result FakeBackend::listProps(std::vector<PropInfo>& out) {
     if (!connected_) return Result::fail("not connected");
     for (const auto& [name, p] : props_) {

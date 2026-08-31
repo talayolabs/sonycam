@@ -56,6 +56,14 @@ json handle(CameraBackend& cam, const json& req, bool& shutdown) {
         resp["result"] = {{"connected", ci.connected},
                           {"model", ci.model},
                           {"transport", ci.transport}};
+    } else if (cmd == "info") {
+        std::vector<PropInfo> fields;
+        r = cam.gearInfo(fields);
+        if (r.ok) {
+            json arr = json::array();
+            for (const auto& p : fields) arr.push_back(propToJson(p));
+            resp["result"] = arr;
+        }
     } else if (cmd == "props") {
         std::vector<PropInfo> props;
         r = cam.listProps(props);

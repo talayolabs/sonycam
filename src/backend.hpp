@@ -39,6 +39,10 @@ public:
     virtual Result disconnect() = 0;
     virtual CameraInfo info() = 0;
 
+    // Hardware identification: body/lens model, serial and firmware info.
+    // Entries are name/value pairs; unsupported fields are omitted.
+    virtual Result gearInfo(std::vector<PropInfo>& out) = 0;
+
     virtual Result listProps(std::vector<PropInfo>& out) = 0;
     virtual Result getProp(const std::string& name, PropInfo& out) = 0;
     virtual Result setProp(const std::string& name, const std::string& value) = 0;

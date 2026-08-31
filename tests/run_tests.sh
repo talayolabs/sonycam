@@ -53,6 +53,9 @@ check_output() {
 check "status" "$SONYCAM" status
 check "props lists properties" "$SONYCAM" props
 check "connect is idempotent" "$SONYCAM" connect
+check_output "info identifies gear" \
+  "lens               FAKE FE 28-70mm F3.5-5.6 OSS" \
+  sh -c "'$SONYCAM' info | grep '^lens '"
 
 # --- get/set round trips ---
 check "get iso" "$SONYCAM" get iso

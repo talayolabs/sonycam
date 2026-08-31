@@ -16,6 +16,7 @@ public:
     Result disconnect() override;
     CameraInfo info() override;
 
+    Result gearInfo(std::vector<PropInfo>& out) override;
     Result listProps(std::vector<PropInfo>& out) override;
     Result getProp(const std::string& name, PropInfo& out) override;
     Result setProp(const std::string& name, const std::string& value) override;

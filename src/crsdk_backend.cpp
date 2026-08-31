@@ -547,6 +547,30 @@ public:
         return ci;
     }
 
+    Result gearInfo(std::vector<PropInfo>& out) override {
+        if (handle_ == 0) return Result::fail("not connected");
+        auto add = [&](const char* name, const std::string& v) {
+            if (!v.empty()) out.push_back(PropInfo{name, v, false, {}});
+        };
+        std::string model = readStringProp(SCRSDK::CrDeviceProperty_ModelName);
+        add("model", model.empty() ? model_ : model);
+        add("body_serial",
+            readStringProp(SCRSDK::CrDeviceProperty_BodySerialNumber));
+        add("body_firmware",
+            readStringProp(SCRSDK::CrDeviceProperty_SoftwareVersion));
+        add("lens", readStringProp(SCRSDK::CrDeviceProperty_LensModelName));
+        add("lens_serial",
+            readStringProp(SCRSDK::CrDeviceProperty_LensSerialNumber));
+        add("lens_firmware",
+            readStringProp(SCRSDK::CrDeviceProperty_LensVersionNumber));
+
+        std::uint64_t zoomEnabled = 0;
+        if (readNumericProp(SCRSDK::CrDeviceProperty_Zoom_Operation_Status,
+                            zoomEnabled))
+            add("remote_zoom", zoomEnabled ? "yes" : "no");
+        return Result::success();
+    }
+
     Result listProps(std::vector<PropInfo>& out) override {
         if (handle_ == 0) return Result::fail("not connected");
         Result firstError = Result::success();
@@ -697,6 +721,39 @@ public:
     }
 
 private:
+    // Reads a CrDataType_STR property (length-prefixed UTF-16). Returns ""
+    // when the property is unsupported or empty.
+    std::string readStringProp(CrInt32u code) {
+        CrDeviceProperty* props = nullptr;
+        CrInt32 num = 0;
+        CrError err = SCRSDK::GetSelectDeviceProperties(
+            handle_, 1, &code, &props, &num);
+        std::string out;
+        if (err == SCRSDK::CrError_None && num > 0 && props) {
+            if (props[0].GetValueType() == SCRSDK::CrDataType_STR) {
+                CrInt16u* s = props[0].GetCurrentStr();
+                if (s) {
+                    int len = static_cast<int>(*s);
+                    for (int i = 1; i < len && s[i]; ++i)
+                        out.push_back(static_cast<char>(s[i]));
+                }
+            }
+        }
+        if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
+        return out;
+    }
+
+    bool readNumericProp(CrInt32u code, std::uint64_t& value) {
+        CrDeviceProperty* props = nullptr;
+        CrInt32 num = 0;
+        CrError err = SCRSDK::GetSelectDeviceProperties(
+            handle_, 1, &code, &props, &num);
+        bool ok = err == SCRSDK::CrError_None && num > 0 && props;
+        if (ok) value = props[0].GetCurrentValue();
+        if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
+        return ok;
+    }
+
     Result ensureHostPcStoreDestination() {
         CrDeviceProperty* props = nullptr;
         CrInt32 num = 0;

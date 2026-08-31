@@ -22,6 +22,8 @@ call auto-starts it (~6s including USB connect). All later calls are fast.
 
 ```
 sonycam status                    connection state and camera model
+sonycam info                      identify gear: body/lens model, serials, firmware,
+                                  and whether the lens supports remote (power) zoom
 sonycam props                     all properties with values (+ per-mode writability)
 sonycam get <prop>                one property, includes valid choices
 sonycam set <prop> <value>        change a property, verifies the camera applied it
@@ -88,7 +90,10 @@ shown as hex (e.g. `0x8053` = movie-manual); you can pass raw hex back to
   check the cable and that the camera is on.
 - `aperture is not writable`: either an auto exposure mode, or the lens has
   a physical aperture ring not set to its "A" position (hardware; cannot be
-  fixed in software).
+  fixed in software). Run `sonycam info` to identify the lens and check
+  whether it has an aperture ring.
+- `remote_zoom no` in `sonycam info`: the lens has a mechanical zoom ring
+  that cannot be driven remotely; only power-zoom (PZ) lenses support it.
 - `drive_mode 0xffffffff`: normal in movie modes; switch to a still mode.
 - Stuck or weird daemon state: `sonycam daemon stop`, then retry (next
   command restarts it).

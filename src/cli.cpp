@@ -29,6 +29,7 @@ const char kUsage[] =
     "\n"
     "commands:\n"
     "  status                     connection state and camera model\n"
+    "  info                       identify gear: body/lens model, serials, firmware\n"
     "  props                      list all supported properties with values\n"
     "  get <prop>                 read one property (e.g. iso, aperture)\n"
     "  set <prop> <value>         write one property (e.g. set iso 800)\n"
@@ -125,6 +126,10 @@ int printResult(const std::string& cmd, const json& resp, bool jsonOut) {
     const json result = resp.contains("result") ? resp["result"] : json();
     if (cmd == "props") {
         for (const auto& p : result) printProp(p);
+    } else if (cmd == "info") {
+        for (const auto& p : result)
+            std::printf("%-18s %s\n", p.value("name", "?").c_str(),
+                        p.value("value", "").c_str());
     } else if (cmd == "get" || cmd == "set") {
         printProp(result);
         if (result.contains("choices")) {
@@ -171,8 +176,8 @@ int main(int argc, char** argv) {
 
     const std::string cmd = args[0];
     json req;
-    if (cmd == "status" || cmd == "props" || cmd == "connect" ||
-        cmd == "disconnect") {
+    if (cmd == "status" || cmd == "info" || cmd == "props" ||
+        cmd == "connect" || cmd == "disconnect") {
         req = {{"cmd", cmd}};
     } else if (cmd == "get") {
         if (args.size() != 2) { std::fprintf(stderr, "usage: sonycam get <prop>\n"); return 2; }
