@@ -32,8 +32,6 @@ M = an afternoon, L = larger.
 
 | # | Item | Effort | Why |
 |---|------|--------|-----|
-| 13 | **Push branch + open PR** — 9+ local commits on `devin/1788195067-initial-cli` | S | Nothing is backed up remotely. |
-| 14 | **CI** — GitHub Actions: fake-mode build + tests (macOS + Linux) | S | Tests only run locally today. |
 | 15 | **`cmake --install` target / packaging** — put `sonycam`+`sonycamd` on PATH properly | S | Currently run from `build/`. |
 
 ## Done (this effort)
@@ -43,6 +41,8 @@ M = an afternoon, L = larger.
 - #3 Named enum values: movie/S&Q/interval exposure programs, scene modes,
   fluorescent/custom WB, more drive modes, `0xffffffff` → `-`
 - #4 Busy-retry in `set` during post-capture/mode-change property locks
+- #13 Branch pushed, PR #1 merged to main
+- #14 CI (build + tests, macOS + Linux) and tag-driven release workflow
 
 - Real-SDK build on macOS (layout detection, dylib staging, Gatekeeper docs)
 - ptpcamerad suppression + USB re-enumeration workaround

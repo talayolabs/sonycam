@@ -9,6 +9,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <csignal>
 #include <cstdio>
 #include <cstring>

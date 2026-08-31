@@ -1,5 +1,7 @@
 # sonycam
 
+[![CI](https://github.com/talayolabs/sonycam/actions/workflows/ci.yml/badge.svg)](https://github.com/talayolabs/sonycam/actions/workflows/ci.yml)
+
 Agent-friendly CLI for controlling Sony Alpha cameras (built for the a7C II /
 ILCE-7CM2) through Sony's official [Camera Remote SDK](https://support.d-imaging.sony.co.jp/app/sdk/en/index.html).
 
