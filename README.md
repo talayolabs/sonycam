@@ -58,6 +58,14 @@ an a7C II (SDK v2.02.00):
    unzip RemoteCli.zip     # -> RemoteCli/ with app/CRSDK headers
                            #    and external/crsdk/libCr_Core.dylib (+ CrAdapter/)
    ```
+
+   **macOS:** Sony's dylibs are only ad-hoc signed (no notarization), so if
+   the zip came from a browser, Gatekeeper's quarantine flag will make macOS
+   refuse to load them ("cannot verify the developer"). Strip it once:
+
+   ```sh
+   xattr -dr com.apple.quarantine /tmp/sonycam-crsdk/RemoteCli
+   ```
 3. Point the build at the extracted `RemoteCli` directory:
 
    ```sh
@@ -105,6 +113,21 @@ with an a7C II.
 - `Menu > Setup > USB > USB Connection Mode > PC Remote` is set.
 - macOS actually sees it: `ioreg -p IOUSB | grep -i ILCE` should list the
   camera.
+
+**macOS blocks the SDK dylibs ("cannot be opened because the developer
+cannot be verified" / `sonycamd` dies on startup)** — the Sony SDK libraries
+are ad-hoc signed, not notarized, so Gatekeeper refuses to load them while
+they carry the browser-download quarantine flag. Fix:
+
+```sh
+xattr -dr com.apple.quarantine /path/to/RemoteCli   # then rebuild
+```
+
+Verify with `xattr -l .../libCr_Core.dylib` — `com.apple.quarantine` must be
+gone (a leftover `com.apple.provenance` entry is harmless). If a security
+dialog already appeared, you can alternatively approve it under
+`System Settings > Privacy & Security > Allow Anyway`. The locally built
+`sonycam`/`sonycamd` binaries are never quarantined, so they need nothing.
 
 **macOS steals the camera (`ptpcamerad`)** — macOS launches `ptpcamerad`
 for any imaging USB device and it grabs the PTP session before the SDK can.
