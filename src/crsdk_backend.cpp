@@ -25,6 +25,16 @@ std::unique_ptr<CameraBackend> makeCrsdkBackend(std::string& error) {
 #include <thread>
 #include <vector>
 
+#ifdef __APPLE__
+#include <CoreFoundation/CoreFoundation.h>
+#include <IOKit/IOCFPlugIn.h>
+#include <IOKit/IOKitLib.h>
+#include <IOKit/usb/IOUSBLib.h>
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 #include "CRSDK/CameraRemote_SDK.h"
 #include "CRSDK/IDeviceCallback.h"
 
@@ -34,6 +44,107 @@ namespace {
 
 using SCRSDK::CrDeviceProperty;
 using SCRSDK::CrError;
+
+#ifdef __APPLE__
+
+// macOS eagerly launches ptpcamerad for imaging-class USB devices. It opens a
+// PTP session before CrSDK can, then respawns too quickly for a one-shot kill.
+// Suppress it only while connecting; the child watches this process so it
+// cannot outlive an abnormal sonycamd exit.
+class PtpCameraSuppressor {
+public:
+    PtpCameraSuppressor() {
+        pid_ = ::fork();
+        if (pid_ != 0) return;
+        std::string parentPid = std::to_string(::getppid());
+        ::execl("/bin/sh", "sonycam-ptp-suppressor", "-c",
+                "while :; do "
+                "kill -0 \"$1\" 2>/dev/null || exit 0; "
+                "/usr/bin/killall -9 ptpcamerad PTPCamera 2>/dev/null; "
+                "done",
+                "sonycam-ptp-suppressor", parentPid.c_str(),
+                static_cast<char*>(nullptr));
+        ::_exit(127);
+    }
+
+    ~PtpCameraSuppressor() {
+        if (pid_ <= 0) return;
+        ::kill(pid_, SIGTERM);
+        while (::waitpid(pid_, nullptr, 0) < 0 && errno == EINTR) {}
+    }
+
+    PtpCameraSuppressor(const PtpCameraSuppressor&) = delete;
+    PtpCameraSuppressor& operator=(const PtpCameraSuppressor&) = delete;
+
+private:
+    pid_t pid_ = -1;
+};
+
+int reenumerateSonyUsbClass(const char* className) {
+    constexpr int kSonyVendor = 0x054c;
+    CFMutableDictionaryRef matching = IOServiceMatching(className);
+    if (!matching) return 0;
+
+    io_iterator_t iterator = IO_OBJECT_NULL;
+    kern_return_t kr = IOServiceGetMatchingServices(
+        kIOMainPortDefault, matching, &iterator);
+    if (kr != KERN_SUCCESS) return 0;
+
+    int reset = 0;
+    io_service_t service;
+    while ((service = IOIteratorNext(iterator)) != IO_OBJECT_NULL) {
+        CFTypeRef value = IORegistryEntryCreateCFProperty(
+            service, CFSTR("idVendor"), kCFAllocatorDefault, 0);
+        int vendor = 0;
+        if (value && CFGetTypeID(value) == CFNumberGetTypeID())
+            CFNumberGetValue(static_cast<CFNumberRef>(value),
+                             kCFNumberIntType, &vendor);
+        if (value) CFRelease(value);
+        if (vendor != kSonyVendor) {
+            IOObjectRelease(service);
+            continue;
+        }
+
+        IOCFPlugInInterface** plugin = nullptr;
+        SInt32 score = 0;
+        kr = IOCreatePlugInInterfaceForService(
+            service, kIOUSBDeviceUserClientTypeID, kIOCFPlugInInterfaceID,
+            &plugin, &score);
+        if (kr != KERN_SUCCESS || !plugin) {
+            IOObjectRelease(service);
+            continue;
+        }
+
+        IOUSBDeviceInterface942** device = nullptr;
+        HRESULT hr = (*plugin)->QueryInterface(
+            plugin, CFUUIDGetUUIDBytes(kIOUSBDeviceInterfaceID942),
+            reinterpret_cast<LPVOID*>(&device));
+        (*plugin)->Release(plugin);
+        if (hr || !device) {
+            IOObjectRelease(service);
+            continue;
+        }
+
+        kr = (*device)->USBDeviceOpen(device);
+        if (kr == KERN_SUCCESS || kr == kIOReturnExclusiveAccess) {
+            if ((*device)->USBDeviceReEnumerate(device, 0) == KERN_SUCCESS)
+                ++reset;
+            (*device)->USBDeviceClose(device);
+        }
+        (*device)->Release(device);
+        IOObjectRelease(service);
+    }
+    IOObjectRelease(iterator);
+    return reset;
+}
+
+int reenumerateSonyUsbDevices() {
+    int reset = reenumerateSonyUsbClass("IOUSBHostDevice");
+    reset += reenumerateSonyUsbClass("IOUSBDevice");
+    return reset;
+}
+
+#endif  // __APPLE__
 
 struct EnumEntry {
     const char* name;
@@ -252,9 +363,10 @@ public:
         connected_ = true;
         cv_.notify_all();
     }
-    void OnDisconnected(CrInt32u) override {
+    void OnDisconnected(CrInt32u reason) override {
         std::lock_guard<std::mutex> lk(m_);
         connected_ = false;
+        disconnectReason_ = reason;
         cv_.notify_all();
     }
     void OnError(CrInt32u error) override {
@@ -269,6 +381,20 @@ public:
                             [&] { return connected_ || lastError_ != 0; }) &&
                connected_;
     }
+    void reset() {
+        std::lock_guard<std::mutex> lk(m_);
+        connected_ = false;
+        lastError_ = 0;
+        disconnectReason_ = 0;
+    }
+    CrInt32u lastError() {
+        std::lock_guard<std::mutex> lk(m_);
+        return lastError_;
+    }
+    CrInt32u disconnectReason() {
+        std::lock_guard<std::mutex> lk(m_);
+        return disconnectReason_;
+    }
     bool isConnected() {
         std::lock_guard<std::mutex> lk(m_);
         return connected_;
@@ -279,6 +405,7 @@ private:
     std::condition_variable cv_;
     bool connected_ = false;
     CrInt32u lastError_ = 0;
+    CrInt32u disconnectReason_ = 0;
 };
 
 std::string crErrorString(CrError e) {
@@ -296,6 +423,17 @@ public:
 
     Result connect() override {
         if (handle_ != 0) return Result::success();
+#ifdef __APPLE__
+        PtpCameraSuppressor suppressor;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        int resetCount = reenumerateSonyUsbDevices();
+        if (resetCount > 0) {
+            std::fprintf(stderr,
+                         "sonycamd: re-enumerated %d Sony USB device(s)\n",
+                         resetCount);
+            std::this_thread::sleep_for(std::chrono::seconds(2));
+        }
+#endif
         if (!sdkInit_) {
             if (!SCRSDK::Init()) return Result::fail("CrSDK Init() failed");
             sdkInit_ = true;
@@ -313,11 +451,12 @@ public:
             found->GetName(), found->GetModel(), found->GetUsbPid(),
             found->GetIdType(), found->GetIdSize(), found->GetId(),
             found->GetConnectionTypeName(), found->GetAdaptorName(),
-            found->GetPairingNecessity());
+            found->GetPairingNecessity(), found->GetSSHsupport());
         model_ = reinterpret_cast<const char*>(found->GetModel());
         enumInfo->Release();
         if (!camera_) return Result::fail("CreateCameraObjectInfo failed");
 
+        callback_.reset();
         err = SCRSDK::Connect(camera_, &callback_, &handle_);
         if (err != SCRSDK::CrError_None) {
             handle_ = 0;
@@ -327,10 +466,42 @@ public:
             SCRSDK::Disconnect(handle_);
             SCRSDK::ReleaseDevice(handle_);
             handle_ = 0;
+            if (callback_.lastError() != 0)
+                return Result::fail(
+                    "camera connection callback failed: " +
+                    crErrorString(static_cast<CrError>(callback_.lastError())));
+            if (callback_.disconnectReason() != 0)
+                return Result::fail(
+                    "camera disconnected while connecting: reason 0x" +
+                    [&] {
+                        char buf[16];
+                        std::snprintf(buf, sizeof(buf), "%08x",
+                                      callback_.disconnectReason());
+                        return std::string(buf);
+                    }());
             return Result::fail("timed out waiting for camera connection");
         }
-        // Take the priority key so the camera accepts remote property writes.
-        setProp("priority_key", "pc_remote");
+
+        // On real bodies OnConnected fires before the property API is ready.
+        // Wait for the priority property, then take the key and verify that
+        // the camera actually applied it before reporting a usable session.
+        Result ready = Result::fail("camera properties did not become ready");
+        for (int i = 0; i < 50; ++i) {
+            PropInfo priority;
+            ready = getProp("priority_key", priority);
+            if (ready.ok) break;
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        if (!ready.ok) {
+            disconnect();
+            return ready;
+        }
+        Result priority = setProp("priority_key", "pc_remote");
+        if (!priority.ok) {
+            disconnect();
+            return Result::fail("cannot acquire PC Remote priority: " +
+                                priority.error);
+        }
         return Result::success();
     }
 
@@ -357,11 +528,14 @@ public:
 
     Result listProps(std::vector<PropInfo>& out) override {
         if (handle_ == 0) return Result::fail("not connected");
+        Result firstError = Result::success();
         for (const auto& def : kProps) {
             PropInfo pi;
             Result r = getProp(def.name, pi);
             if (r.ok) out.push_back(std::move(pi));
+            else if (firstError.ok) firstError = r;
         }
+        if (out.empty() && !firstError.ok) return firstError;
         return Result::success();
     }
 
@@ -374,8 +548,10 @@ public:
         CrInt32 num = 0;
         CrInt32u code = def->code;
         CrError err = SCRSDK::GetSelectDeviceProperties(handle_, 1, &code, &props, &num);
-        if (err != SCRSDK::CrError_None || num == 0 || !props)
+        if (err != SCRSDK::CrError_None || num == 0 || !props) {
+            if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
             return Result::fail("GetSelectDeviceProperties failed: " + crErrorString(err));
+        }
 
         out.name = name;
         out.value = valueToString(*def, props[0].GetCurrentValue());
@@ -392,14 +568,47 @@ public:
         std::uint64_t raw = 0;
         if (!valueFromString(*def, value, raw))
             return Result::fail("cannot parse value '" + value + "' for " + name);
+
+        CrDeviceProperty* current = nullptr;
+        CrInt32 num = 0;
+        CrInt32u code = def->code;
+        CrError err = SCRSDK::GetSelectDeviceProperties(
+            handle_, 1, &code, &current, &num);
+        if (err != SCRSDK::CrError_None || num == 0 || !current) {
+            if (current) SCRSDK::ReleaseDeviceProperties(handle_, current);
+            return Result::fail("cannot read " + name + " before writing: " +
+                                crErrorString(err));
+        }
+        SCRSDK::CrDataType valueType = current[0].GetValueType();
+        bool writable = current[0].IsSetEnableCurrentValue();
+        SCRSDK::ReleaseDeviceProperties(handle_, current);
+        if (!writable)
+            return Result::fail(name +
+                                " is not writable in the current camera mode");
+
         CrDeviceProperty prop;
         prop.SetCode(def->code);
-        prop.SetValueType(def->dataType);
+        prop.SetValueType(valueType);
         prop.SetCurrentValue(raw);
-        CrError err = SCRSDK::SetDeviceProperty(handle_, &prop);
+        err = SCRSDK::SetDeviceProperty(handle_, &prop);
         if (err != SCRSDK::CrError_None)
             return Result::fail("SetDeviceProperty failed: " + crErrorString(err));
-        return Result::success();
+
+        for (int i = 0; i < 20; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            current = nullptr;
+            num = 0;
+            err = SCRSDK::GetSelectDeviceProperties(
+                handle_, 1, &code, &current, &num);
+            if (err == SCRSDK::CrError_None && num > 0 && current) {
+                bool applied = current[0].GetCurrentValue() == raw;
+                SCRSDK::ReleaseDeviceProperties(handle_, current);
+                if (applied) return Result::success();
+            } else if (current) {
+                SCRSDK::ReleaseDeviceProperties(handle_, current);
+            }
+        }
+        return Result::fail("camera did not apply " + name + "=" + value);
     }
 
     Result capture(const std::string& saveDir, std::string& outFile) override {
@@ -425,8 +634,15 @@ public:
 
     Result liveviewFrame(const std::string& path) override {
         if (handle_ == 0) return Result::fail("not connected");
+        SCRSDK::CrLiveViewProperty* props = nullptr;
+        CrInt32 num = 0;
+        CrError err = SCRSDK::GetLiveViewProperties(handle_, &props, &num);
+        if (err != SCRSDK::CrError_None)
+            return Result::fail("GetLiveViewProperties failed: " +
+                                crErrorString(err));
+        if (props) SCRSDK::ReleaseLiveViewProperties(handle_, props);
         SCRSDK::CrImageInfo info;
-        CrError err = SCRSDK::GetLiveViewImageInfo(handle_, &info);
+        err = SCRSDK::GetLiveViewImageInfo(handle_, &info);
         if (err != SCRSDK::CrError_None)
             return Result::fail("GetLiveViewImageInfo failed: " + crErrorString(err));
         if (info.GetBufferSize() == 0)
@@ -453,7 +669,7 @@ private:
         CrInt32u byteSize = prop.GetValueSize();
         if (!values || byteSize == 0) return out;
         size_t stride = 0;
-        switch (def.dataType & 0x0FFF) {
+        switch (prop.GetValueType() & 0x0FFF) {
             case SCRSDK::CrDataType_UInt8: stride = 1; break;
             case SCRSDK::CrDataType_UInt16: stride = 2; break;
             case SCRSDK::CrDataType_UInt32: stride = 4; break;
