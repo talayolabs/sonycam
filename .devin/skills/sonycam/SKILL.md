@@ -94,6 +94,43 @@ Interpret the results and remember them for the whole session:
 Report the identified gear (body, lens, firmware) to the user at the start
 so hardware limitations are understood by everyone.
 
+## Hard limitations — things this tool can NOT do
+
+Do not attempt these, do not retry them, and do not promise them to the
+user. When one is requested, explain the limitation and offer the listed
+alternative.
+
+1. **Register or recall the camera's Memory slots (M1/M2/M3 on the dial).**
+   Sony's Camera Remote SDK simply does not expose it (verified against the
+   full per-model API matrix, latest SDK version). Alternative:
+   `sonycam preset save/load <file>` snapshots and restores the ENTIRE
+   camera configuration to/from a file on this computer — same outcome,
+   unlimited slots. Registering M1/M2/M3 themselves must be done in the
+   camera menu by a human.
+2. **Zoom or change focal length on a mechanical-zoom lens**
+   (`remote_zoom no` in `info`). There is no motor; a human must turn the
+   ring. Only power-zoom (PZ) lenses can zoom remotely.
+3. **Control aperture while the lens's aperture ring is off "A".** The
+   physical ring always wins; ask the human to move it to "A".
+4. **Download RAW files or video clips.** `capture` only receives the JPEG
+   rendition the camera transfers; RAWs and movie files stay on the memory
+   card (SDK supports card access, but this CLI does not implement it yet —
+   see BACKLOG #18). A human must offload the card.
+5. **Make remote overrides survive a reconnect.** exposure_program and
+   friends silently revert to the physical dial after any disconnect,
+   replug, or camera reboot. Re-apply them (or use `preset load`).
+6. **Confirm dialogs on the camera's screen.** e.g. the USB-connection-mode
+   prompt after a `preset load` reboot needs a human (or pin the camera's
+   USB Connection Mode menu to "PC Remote" beforehand).
+7. **Power the camera ON.** Once off (or after battery pull), USB gives us
+   nothing; a human must flip the switch.
+8. **Set Auto ISO limits or Log shooting on this body.** The a7C II rejects
+   `iso_auto_min`/`iso_auto_max`/`log_shooting` over remote even though the
+   CLI wires them; they must be set in the camera menu (a preset file does
+   capture them).
+9. **Physical acts**: mounting lenses, inserting cards/batteries, moving
+   the camera, removing the lens cap.
+
 ## Critical rules during operation
 
 1. **Focus before you shoot.** Run `sonycam focus af` first: it half-presses,
