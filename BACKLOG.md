@@ -10,7 +10,7 @@ M = an afternoon, L = larger.
 |---|------|--------|-----|
 | 21 | **Display string lists** — camera-rendered names for PP/Creative Look etc. | S | Nicer agent output than enum guesses. |
 | 22 | **Maintenance ops** — card format (full/quick), new folder, file-number reset, power off, sensor cleaning | S | Operational hygiene commands. |
-| 11b | **Wi-Fi validation** — transport reporting is real now, but only USB is hardware-tested | M | Needs camera Wi-Fi pairing. |
+| 11b | **Wi-Fi support** — parked. A direct-IP `connect <IP[/MAC]>` implementation exists in git history (commit 4c41d3d, reverted as never-proven); it reached the camera but PTP-IP was refused (0x8202) because the camera side was never armed. To retry: camera menu — Wi-Fi Connect to the AP, PC Remote ON, connection method "Wi-Fi Access Point" (a7C II keeps Pairing greyed until the AP link is live), Access Authen. OFF, run Pairing during connect. USB is better for every current use case. | M | Cable-free operation only. |
 | 23 | **files pull progress/multi-file** — `files pull --all --since DATE`, progress output for long video transfers | S-M | Pulls are silent for minutes on big clips. |
 
 ## Done (this effort)
