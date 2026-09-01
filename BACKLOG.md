@@ -13,7 +13,7 @@ M = an afternoon, L = larger.
 
 ## Done (this effort)
 
-- v0.2.0 batch: #7 file_format/image_quality props, #8 color_temp kelvin
+- v0.3.0 batch: #7 file_format/image_quality props, #8 color_temp kelvin
   (+ range display `min..max step X`), #9 `liveview --follow/--frames`
   with atomic frame writes, #10 `zoom in/out/stop` (gated on
   Zoom_Operation_Status), #11 real transport reporting, #12
