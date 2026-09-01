@@ -12,7 +12,7 @@ class FakeBackend : public CameraBackend {
 public:
     FakeBackend();
 
-    Result connect(const std::string& target) override;
+    Result connect() override;
     Result disconnect() override;
     CameraInfo info() override;
 

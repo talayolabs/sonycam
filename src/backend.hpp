@@ -41,11 +41,7 @@ class CameraBackend {
 public:
     virtual ~CameraBackend() = default;
 
-    // `target` is empty for USB/auto discovery, or "IP[/MAC]" for a direct
-    // network connection (e.g. "192.168.1.123" or
-    // "192.168.1.123/AA:BB:CC:DD:EE:FF"). The backend remembers the last
-    // target for automatic reconnects.
-    virtual Result connect(const std::string& target) = 0;
+    virtual Result connect() = 0;
     virtual Result disconnect() = 0;
     virtual CameraInfo info() = 0;
 

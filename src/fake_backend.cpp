@@ -124,7 +124,7 @@ FakeBackend::FakeBackend() {
                                         "extra_fine"}, true};
 }
 
-Result FakeBackend::connect(const std::string&) {
+Result FakeBackend::connect() {
     connected_ = true;
     return Result::success();
 }
