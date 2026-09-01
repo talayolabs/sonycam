@@ -2,13 +2,19 @@
 //
 // Exit codes: 0 = ok, 1 = camera/daemon error, 2 = usage, 3 = daemon unreachable.
 
+#include <arpa/inet.h>
 #include <fcntl.h>
 #include <libgen.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <cctype>
+#include <cerrno>
+#include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <thread>
@@ -17,6 +23,7 @@
 #include <nlohmann/json.hpp>
 
 #include "protocol.hpp"
+#include "ui_html.hpp"
 
 using json = nlohmann::json;
 using namespace sonycam;
@@ -41,6 +48,7 @@ const char kUsage[] =
     "  liveview <out.jpg>         save one live-view frame\n"
     "  connect | disconnect       manage the camera connection\n"
     "  daemon stop                stop the background daemon\n"
+    "  --ui [[HOST:]PORT]         serve a web UI (default 127.0.0.1:3000)\n"
     "\n"
     "properties: iso aperture shutter_speed exposure_comp exposure_program\n"
     "            white_balance focus_mode focus_area drive_mode priority_key\n"
@@ -52,6 +60,7 @@ const char kUsage[] =
     "flags:\n"
     "  --json     machine-readable output\n"
     "  --fake     use the built-in simulated camera (no hardware needed)\n"
+    "  --ui       start a local web UI for live viewing/tweaking properties\n"
     "\n"
     "The first command auto-starts the sonycamd daemon, which keeps the\n"
     "camera connection open between invocations.\n";
@@ -177,10 +186,149 @@ int printResult(const std::string& cmd, const json& resp, bool jsonOut) {
     return 0;
 }
 
+json daemonCall(const std::string& socketPath, const json& req) {
+    int fd = connectSocket(socketPath);
+    if (fd < 0) return {{"ok", false}, {"error", "daemon unreachable"}};
+    json resp;
+    bool ok = sendRequest(fd, req, resp);
+    ::close(fd);
+    if (!ok) return {{"ok", false}, {"error", "lost connection to daemon"}};
+    return resp;
+}
+
+void httpReply(int fd, int code, const char* status,
+               const std::string& contentType, const std::string& body) {
+    char head[256];
+    int n = std::snprintf(head, sizeof(head),
+                          "HTTP/1.1 %d %s\r\n"
+                          "Content-Type: %s\r\n"
+                          "Content-Length: %zu\r\n"
+                          "Cache-Control: no-store\r\n"
+                          "Connection: close\r\n\r\n",
+                          code, status, contentType.c_str(), body.size());
+    (void)::write(fd, head, static_cast<size_t>(n));
+    (void)::write(fd, body.data(), body.size());
+}
+
+void httpJson(int fd, const json& resp) {
+    httpReply(fd, resp.value("ok", false) ? 200 : 400, "OK",
+              "application/json", resp.dump());
+}
+
+void serveHttpClient(int fd, const std::string& socketPath) {
+    std::string buf;
+    char chunk[4096];
+    size_t headerEnd;
+    for (;;) {
+        headerEnd = buf.find("\r\n\r\n");
+        if (headerEnd != std::string::npos) break;
+        if (buf.size() > 65536) return;
+        ssize_t n = ::read(fd, chunk, sizeof(chunk));
+        if (n <= 0) return;
+        buf.append(chunk, static_cast<size_t>(n));
+    }
+
+    size_t lineEnd = buf.find("\r\n");
+    std::string reqLine = buf.substr(0, lineEnd);
+    size_t sp1 = reqLine.find(' ');
+    size_t sp2 = reqLine.find(' ', sp1 + 1);
+    if (sp1 == std::string::npos || sp2 == std::string::npos) return;
+    std::string method = reqLine.substr(0, sp1);
+    std::string path = reqLine.substr(sp1 + 1, sp2 - sp1 - 1);
+
+    size_t contentLength = 0;
+    {
+        std::string headers = buf.substr(0, headerEnd);
+        for (char& c : headers) c = static_cast<char>(std::tolower(c));
+        size_t h = headers.find("content-length:");
+        if (h != std::string::npos)
+            contentLength = std::strtoul(headers.c_str() + h + 15, nullptr, 10);
+    }
+    if (contentLength > 65536) return;
+    std::string body = buf.substr(headerEnd + 4);
+    while (body.size() < contentLength) {
+        ssize_t n = ::read(fd, chunk, sizeof(chunk));
+        if (n <= 0) return;
+        body.append(chunk, static_cast<size_t>(n));
+    }
+
+    if (method == "GET" && (path == "/" || path == "/index.html")) {
+        httpReply(fd, 200, "OK", "text/html; charset=utf-8", kUiHtml);
+    } else if (method == "GET" && path == "/api/props") {
+        httpJson(fd, daemonCall(socketPath, json{{"cmd", "props"}}));
+    } else if (method == "GET" && path == "/api/status") {
+        httpJson(fd, daemonCall(socketPath, json{{"cmd", "status"}}));
+    } else if (method == "POST" && path == "/api/set") {
+        json req;
+        try {
+            req = json::parse(body);
+        } catch (...) {
+            httpJson(fd, json{{"ok", false}, {"error", "bad JSON body"}});
+            return;
+        }
+        httpJson(fd, daemonCall(socketPath,
+                                json{{"cmd", "set"},
+                                     {"prop", req.value("prop", "")},
+                                     {"value", req.value("value", "")}}));
+    } else {
+        httpReply(fd, 404, "Not Found", "text/plain", "not found\n");
+    }
+}
+
+bool parseBind(const std::string& spec, std::string& host, int& port) {
+    std::string p = spec;
+    size_t colon = spec.rfind(':');
+    if (colon != std::string::npos) {
+        host = spec.substr(0, colon);
+        p = spec.substr(colon + 1);
+    }
+    if (p.empty() || p.find_first_not_of("0123456789") != std::string::npos)
+        return false;
+    port = std::atoi(p.c_str());
+    return port > 0 && port <= 65535;
+}
+
+int runUiServer(const std::string& host, int port, const std::string& socketPath) {
+    int srv = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (srv < 0) { std::perror("socket"); return 1; }
+    int one = 1;
+    ::setsockopt(srv, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<uint16_t>(port));
+    if (::inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+        std::fprintf(stderr, "error: invalid bind address %s\n", host.c_str());
+        return 2;
+    }
+    if (::bind(srv, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) < 0) {
+        std::fprintf(stderr, "error: cannot bind %s:%d: %s\n",
+                     host.c_str(), port, std::strerror(errno));
+        ::close(srv);
+        return 1;
+    }
+    if (::listen(srv, 8) < 0) { std::perror("listen"); ::close(srv); return 1; }
+    std::signal(SIGPIPE, SIG_IGN);
+    std::printf("sonycam ui: http://%s:%d/ (Ctrl-C to stop)\n", host.c_str(), port);
+    std::fflush(stdout);
+    for (;;) {
+        int fd = ::accept(srv, nullptr, nullptr);
+        if (fd < 0) {
+            if (errno == EINTR) continue;
+            break;
+        }
+        serveHttpClient(fd, socketPath);
+        ::close(fd);
+    }
+    ::close(srv);
+    return 0;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    bool jsonOut = false, fake = false;
+    bool jsonOut = false, fake = false, ui = false;
+    std::string uiHost = "127.0.0.1";
+    int uiPort = 3000;
     std::string socketPath = defaultSocketPath();
     std::vector<std::string> args;
     for (int i = 1; i < argc; ++i) {
@@ -188,10 +336,19 @@ int main(int argc, char** argv) {
         if (a == "--json") jsonOut = true;
         else if (a == "--fake") fake = true;
         else if (a == "--socket" && i + 1 < argc) socketPath = argv[++i];
+        else if (a == "--ui") {
+            ui = true;
+            if (i + 1 < argc && parseBind(argv[i + 1], uiHost, uiPort)) ++i;
+        }
         else if (a == "-h" || a == "--help") { std::fputs(kUsage, stdout); return 0; }
         else args.push_back(a);
     }
     if (std::getenv("SONYCAM_FAKE")) fake = true;
+    if (ui && !args.empty()) {
+        std::fprintf(stderr, "usage: sonycam [--fake] [--socket PATH] --ui [[HOST:]PORT]\n");
+        return 2;
+    }
+    if (ui) args.push_back("--ui");  // reuse the daemon auto-start path below
     if (args.empty()) {
         std::fputs(kUsage, stderr);
         return 2;
@@ -199,7 +356,9 @@ int main(int argc, char** argv) {
 
     const std::string cmd = args[0];
     json req;
-    if (cmd == "status" || cmd == "info" || cmd == "props" ||
+    if (cmd == "--ui") {
+        req = {{"cmd", "ping"}};
+    } else if (cmd == "status" || cmd == "info" || cmd == "props" ||
         cmd == "connect" || cmd == "disconnect") {
         req = {{"cmd", cmd}};
     } else if (cmd == "get") {
@@ -288,5 +447,6 @@ int main(int argc, char** argv) {
         return 3;
     }
     ::close(fd);
+    if (ui) return runUiServer(uiHost, uiPort, socketPath);
     return printResult(cmd, resp, jsonOut);
 }
