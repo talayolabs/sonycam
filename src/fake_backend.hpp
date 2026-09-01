@@ -21,12 +21,14 @@ public:
     Result getProp(const std::string& name, PropInfo& out) override;
     Result setProp(const std::string& name, const std::string& value) override;
 
+    Result record(const std::string& op, std::string& outState) override;
     Result focus(const std::string& op, int steps, std::string& outStatus) override;
     Result capture(const std::string& saveDir, std::string& outFile) override;
     Result liveviewFrame(const std::string& path) override;
 
 private:
     bool connected_ = false;
+    bool recording_ = false;
     int captureCount_ = 0;
     int liveviewCount_ = 0;
     struct FakeProp {

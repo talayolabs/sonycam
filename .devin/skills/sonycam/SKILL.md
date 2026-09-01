@@ -30,6 +30,7 @@ sonycam set <prop> <value>        change a property, verifies the camera applied
 sonycam focus af                  autofocus (half-press), waits for lock, reports state
 sonycam focus near|far [N]        manual-focus nudge N steps (requires focus_mode mf)
 sonycam focus status              current focus indication (unlocked/focused/tracking)
+sonycam record start|stop|status  movie recording (camera must be in a movie mode)
 sonycam capture [--dir DIR]       fire the shutter, downloads the image, prints its path
 sonycam liveview <out.jpg>        save one live-view frame (fast, no shutter)
 sonycam connect | disconnect      manage the camera connection
@@ -114,7 +115,12 @@ shown as hex and can be passed back to `set` verbatim.
 ## Troubleshooting
 
 - `no camera found`: camera off, asleep, or USB unplugged. Ask the user to
-  check the cable and that the camera is on.
+  check the cable and that the camera is on. After a replug the next
+  command reconnects automatically (~6s); an explicit `disconnect` is
+  sticky and needs `connect`. Remember the camera reverts to its physical
+  dial mode after any reconnect.
+- `the camera refused the shutter release`: definitive — the shutter did
+  not fire. Movie mode or AF-block; fix the mode / focus and retry.
 - `aperture is not writable`: either an auto exposure mode, or the lens has
   a physical aperture ring not set to its "A" position (hardware; cannot be
   fixed in software). Run `sonycam info` to identify the lens and check

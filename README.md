@@ -21,6 +21,7 @@ sonycam set shutter_speed 1/250
 sonycam set white_balance daylight
 sonycam focus af                  # autofocus, waits for lock
 sonycam focus near 5              # manual-focus nudge (focus_mode mf)
+sonycam record start              # movie recording (movie mode)
 sonycam capture --dir ~/photos    # trigger the shutter
 sonycam liveview frame.jpg        # save one live-view frame
 sonycam --json props              # machine-readable output for agents
@@ -183,9 +184,14 @@ No software fix exists; turn the ring.
 **`drive_mode -` / read-only exposure_comp** — normal in movie modes; the
 camera genuinely doesn't expose them there. Switch to a still mode.
 
+**USB unplugged / camera turned off mid-session** — the daemon notices
+(`status` shows disconnected) and the next command reconnects automatically
+once the camera is back (~6s). An explicit `sonycam disconnect` is sticky
+and requires `sonycam connect`. Settings changed remotely revert to the
+physical dial position after any reconnect.
+
 **Stuck or weird daemon state** — `sonycam daemon stop`, then run any
-command to restart it. Settings changed remotely (exposure_program, etc.)
-revert to the physical dial on reconnect.
+command to restart it.
 
 **Unknown hex values in `props`** — the camera reported a value outside the
 CLI's name tables (common for scene/movie modes). They're valid: pass the
@@ -216,8 +222,8 @@ Reference material (not dependencies): [crsdk.app property docs](https://crsdk.a
   FE 24-70mm F2.8 GM II over USB on Apple Silicon macOS. Full round trip
   works: connect, props, get/set (incl. aperture with the lens ring on "A"),
   capture with image download, live view, gear identification.
-- Not exposed yet (SDK supports them): power-zoom control, movie record
-  start/stop, file format selection, absolute focus positioning.
+- Not exposed yet (SDK supports them): power-zoom control, file format
+  selection, absolute focus positioning.
 - Value codecs for shutter/ISO/EV follow the SDK header conventions; exact
   accepted values depend on the camera mode (e.g. aperture is not writable
   in S mode, most exposure props are locked in full Auto).

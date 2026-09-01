@@ -105,6 +105,12 @@ check_fails "focus af refused in MF mode" "$SONYCAM" focus af
 check_fails "focus rejects bad op" "$SONYCAM" focus sideways
 check "restore focus_mode af_s" "$SONYCAM" set focus_mode af_s
 
+# --- movie recording ---
+check_output "record status idle" "record: not_recording" "$SONYCAM" record status
+check_output "record start" "record: recording" "$SONYCAM" record start
+check_output "record stop" "record: not_recording" "$SONYCAM" record stop
+check_fails "record rejects bad op" "$SONYCAM" record pause
+
 # --- priority key gate ---
 check "set priority_key camera" "$SONYCAM" set priority_key camera
 check_fails "capture refused without pc_remote" "$SONYCAM" capture --dir "$WORK"

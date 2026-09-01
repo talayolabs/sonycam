@@ -47,6 +47,10 @@ public:
     virtual Result getProp(const std::string& name, PropInfo& out) = 0;
     virtual Result setProp(const std::string& name, const std::string& value) = 0;
 
+    // Movie recording. op: "start", "stop", or "status". `outState` reports
+    // the resulting recording state (recording / not_recording / ...).
+    virtual Result record(const std::string& op, std::string& outState) = 0;
+
     // Focus control. op: "af" (half-press, wait for lock, release),
     // "near"/"far" (manual-focus nudges, `steps` times), "status" (read the
     // focus indication). `outStatus` reports the resulting focus state.

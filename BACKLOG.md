@@ -4,19 +4,6 @@ Priorities: P0 = fixes a real failure seen on hardware · P1 = robustness /
 agent ergonomics · P2 = new capability · P3 = infra. Effort: S < 1h-ish,
 M = an afternoon, L = larger.
 
-## P0 — unblocks failures we actually hit
-
-| # | Item | Effort | Why |
-|---|------|--------|-----|
-| 2 | **Movie record start/stop** — `sonycam record start\|stop` | S-M | The camera's dial lives in movie mode; the CLI can't do the one thing that mode is for. SDK: `CrCommandId_MovieRecord`. |
-
-## P1 — robustness & agent ergonomics
-
-| # | Item | Effort | Why |
-|---|------|--------|-----|
-| 5 | **USB unplug/replug recovery** — verify daemon behavior on `OnDisconnected`, auto-reconnect on next command | M | Untested path; needs physical cable pull (requires user). |
-| 6 | **Readiness wait after mode change** — replace capture's blind 3x release retry with polling a readiness signal if one exists | M | Current retry works but is a heuristic. |
-
 ## P2 — new capabilities
 
 | # | Item | Effort | Why |
@@ -41,6 +28,11 @@ M = an afternoon, L = larger.
 - #3 Named enum values: movie/S&Q/interval exposure programs, scene modes,
   fluorescent/custom WB, more drive modes, `0xffffffff` → `-`
 - #4 Busy-retry in `set` during post-capture/mode-change property locks
+- #2 Movie record start/stop/status (verified: 3s clip on the a7C II)
+- #5 USB unplug/replug recovery: SDK reconnecting-state tracking +
+  auto-reconnect on next command; explicit disconnect stays sticky
+- #6 Capture readiness via CrNotify_Captured_Event: mode-switch capture in
+  ~3s, definitive "release refused" errors, no double-shot risk
 - #13 Branch pushed, PR #1 merged to main
 - #14 CI (build + tests, macOS + Linux) and tag-driven release workflow
 

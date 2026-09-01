@@ -182,6 +182,15 @@ Result FakeBackend::setProp(const std::string& name, const std::string& value) {
     return Result::success();
 }
 
+Result FakeBackend::record(const std::string& op, std::string& outState) {
+    if (!connected_) return Result::fail("not connected");
+    if (op == "start") recording_ = true;
+    else if (op == "stop") recording_ = false;
+    else if (op != "status") return Result::fail("unknown record op: " + op);
+    outState = recording_ ? "recording" : "not_recording";
+    return Result::success();
+}
+
 Result FakeBackend::focus(const std::string& op, int steps, std::string& outStatus) {
     if (!connected_) return Result::fail("not connected");
     const std::string mode = props_["focus_mode"].value;

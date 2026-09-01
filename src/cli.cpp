@@ -45,6 +45,7 @@ const char kUsage[] =
     "  focus af                   autofocus (half-press), waits for lock\n"
     "  focus near|far [N]         manual-focus nudge N steps (needs focus_mode mf)\n"
     "  focus status               current focus indication\n"
+    "  record start|stop|status   movie recording (camera must be in a movie mode)\n"
     "  capture [--dir DIR]        trigger the shutter\n"
     "  liveview <out.jpg>         save one live-view frame\n"
     "  connect | disconnect       manage the camera connection\n"
@@ -176,6 +177,8 @@ int printResult(const std::string& cmd, const json& resp, bool jsonOut) {
                     result.value("transport", "-").c_str());
     } else if (cmd == "focus") {
         std::printf("focus: %s\n", result.value("status", "").c_str());
+    } else if (cmd == "record") {
+        std::printf("record: %s\n", result.value("state", "").c_str());
     } else if (cmd == "capture") {
         std::string f = result.value("file", "");
         std::printf("captured%s%s\n", f.empty() ? "" : ": ", f.c_str());
@@ -423,6 +426,13 @@ int main(int argc, char** argv) {
             }
         }
         req = {{"cmd", "focus"}, {"op", args[1]}, {"steps", steps}};
+    } else if (cmd == "record") {
+        if (args.size() != 2 ||
+            (args[1] != "start" && args[1] != "stop" && args[1] != "status")) {
+            std::fprintf(stderr, "usage: sonycam record start|stop|status\n");
+            return 2;
+        }
+        req = {{"cmd", "record"}, {"op", args[1]}};
     } else if (cmd == "capture") {
         req = {{"cmd", "capture"}};
         for (size_t i = 1; i + 1 < args.size(); ++i)

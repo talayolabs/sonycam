@@ -403,6 +403,7 @@ public:
     void OnConnected(SCRSDK::DeviceConnectionVersioin) override {
         std::lock_guard<std::mutex> lk(m_);
         connected_ = true;
+        reconnecting_ = false;
         cv_.notify_all();
     }
     void OnDisconnected(CrInt32u reason) override {
@@ -415,6 +416,30 @@ public:
         std::lock_guard<std::mutex> lk(m_);
         lastError_ = error;
         cv_.notify_all();
+    }
+    void OnWarning(CrInt32u warning) override {
+        if (warning == SCRSDK::CrNotify_Captured_Event) {
+            std::lock_guard<std::mutex> lk(m_);
+            capturedEvent_ = true;
+            cv_.notify_all();
+            return;
+        }
+        if (warning == SCRSDK::CrWarning_Connect_Reconnecting) {
+            std::lock_guard<std::mutex> lk(m_);
+            if (!reconnecting_)
+                std::fprintf(stderr,
+                             "sonycamd: camera connection lost (USB unplugged "
+                             "or camera off)\n");
+            reconnecting_ = true;
+            return;
+        }
+        if (warning == SCRSDK::CrWarning_Connect_Reconnected) {
+            std::lock_guard<std::mutex> lk(m_);
+            reconnecting_ = false;
+            std::fprintf(stderr, "sonycamd: camera reconnected\n");
+            return;
+        }
+        std::fprintf(stderr, "sonycamd: camera warning 0x%08x\n", warning);
     }
     void OnCompleteDownload(CrChar* filename, CrInt32u) override {
         std::lock_guard<std::mutex> lk(m_);
@@ -432,6 +457,7 @@ public:
     void reset() {
         std::lock_guard<std::mutex> lk(m_);
         connected_ = false;
+        reconnecting_ = false;
         lastError_ = 0;
         disconnectReason_ = 0;
     }
@@ -447,10 +473,22 @@ public:
         std::lock_guard<std::mutex> lk(m_);
         return connected_;
     }
+    bool isReconnecting() {
+        std::lock_guard<std::mutex> lk(m_);
+        return reconnecting_;
+    }
     void armDownload() {
         std::lock_guard<std::mutex> lk(m_);
         downloadDone_ = false;
+        capturedEvent_ = false;
         downloadedFile_.clear();
+    }
+    // True once the camera reports the shutter actually fired (or the file
+    // already arrived, for bodies that skip the captured event).
+    bool waitCaptured(int timeoutMs) {
+        std::unique_lock<std::mutex> lk(m_);
+        return cv_.wait_for(lk, std::chrono::milliseconds(timeoutMs),
+                            [&] { return capturedEvent_ || downloadDone_; });
     }
     bool waitDownload(int timeoutSec, std::string& file) {
         std::unique_lock<std::mutex> lk(m_);
@@ -465,9 +503,11 @@ private:
     std::mutex m_;
     std::condition_variable cv_;
     bool connected_ = false;
+    bool reconnecting_ = false;
     CrInt32u lastError_ = 0;
     CrInt32u disconnectReason_ = 0;
     bool downloadDone_ = false;
+    bool capturedEvent_ = false;
     std::string downloadedFile_;
 };
 
@@ -475,6 +515,22 @@ std::string crErrorString(CrError e) {
     char buf[32];
     std::snprintf(buf, sizeof(buf), "CrError 0x%04x", static_cast<unsigned>(e));
     return buf;
+}
+
+std::string recordingStateName(std::uint64_t v) {
+    switch (v) {
+        case SCRSDK::CrMovie_Recording_State_Not_Recording: return "not_recording";
+        case SCRSDK::CrMovie_Recording_State_Recording: return "recording";
+        case SCRSDK::CrMovie_Recording_State_Recording_Failed: return "failed";
+        case SCRSDK::CrMovie_Recording_State_IntervalRec_Waiting_Record:
+            return "interval_waiting";
+        default: {
+            char buf[32];
+            std::snprintf(buf, sizeof(buf), "0x%llx",
+                          static_cast<unsigned long long>(v));
+            return buf;
+        }
+    }
 }
 
 std::string focusIndicationName(std::uint64_t v) {
@@ -502,7 +558,19 @@ public:
     }
 
     Result connect() override {
-        if (handle_ != 0) return Result::success();
+        userDisconnected_ = false;
+        if (handle_ != 0) {
+            if (callback_.isConnected() && !callback_.isReconnecting())
+                return Result::success();
+            teardown();  // stale handle from a dropped connection
+        }
+        connecting_ = true;
+        Result r = connectImpl();
+        connecting_ = false;
+        return r;
+    }
+
+    Result connectImpl() {
 #ifdef __APPLE__
         PtpCameraSuppressor suppressor;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -586,28 +654,43 @@ public:
     }
 
     Result disconnect() override {
+        userDisconnected_ = true;
+        return teardown();
+    }
+
+    // Recovers dropped connections (USB unplug/replug, camera slept) by
+    // tearing down and reconnecting. Explicit `disconnect` stays sticky.
+    Result ensureConnected() {
+        // connect() itself uses getProp/setProp for readiness checks; don't
+        // recurse into another connect attempt from those calls.
+        if (connecting_)
+            return handle_ != 0 ? Result::success()
+                                : Result::fail("not connected");
+        if (handle_ != 0 && callback_.isConnected() &&
+            !callback_.isReconnecting())
+            return Result::success();
+        if (userDisconnected_)
+            return Result::fail("not connected (run 'sonycam connect')");
         if (handle_ != 0) {
-            SCRSDK::Disconnect(handle_);
-            SCRSDK::ReleaseDevice(handle_);
-            handle_ = 0;
+            std::fprintf(stderr,
+                         "sonycamd: camera connection lost; reconnecting\n");
+            teardown();
         }
-        if (camera_) {
-            camera_->Release();
-            camera_ = nullptr;
-        }
-        return Result::success();
+        return connect();
     }
 
     CameraInfo info() override {
         CameraInfo ci;
-        ci.connected = handle_ != 0 && callback_.isConnected();
+        ci.connected = handle_ != 0 && callback_.isConnected() &&
+                       !callback_.isReconnecting();
         ci.model = model_;
         ci.transport = "usb/net";
         return ci;
     }
 
     Result gearInfo(std::vector<PropInfo>& out) override {
-        if (handle_ == 0) return Result::fail("not connected");
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
         auto add = [&](const char* name, const std::string& v) {
             if (!v.empty()) out.push_back(PropInfo{name, v, false, {}});
         };
@@ -631,7 +714,8 @@ public:
     }
 
     Result listProps(std::vector<PropInfo>& out) override {
-        if (handle_ == 0) return Result::fail("not connected");
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
         Result firstError = Result::success();
         for (const auto& def : kProps) {
             PropInfo pi;
@@ -644,7 +728,8 @@ public:
     }
 
     Result getProp(const std::string& name, PropInfo& out) override {
-        if (handle_ == 0) return Result::fail("not connected");
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
         const PropDef* def = findProp(name);
         if (!def) return Result::fail("unknown property: " + name);
 
@@ -666,7 +751,8 @@ public:
     }
 
     Result setProp(const std::string& name, const std::string& value) override {
-        if (handle_ == 0) return Result::fail("not connected");
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
         const PropDef* def = findProp(name);
         if (!def) return Result::fail("unknown property: " + name);
         std::uint64_t raw = 0;
@@ -728,9 +814,58 @@ public:
         return Result::fail("camera did not apply " + name + "=" + value);
     }
 
+    Result record(const std::string& op, std::string& outState) override {
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
+
+        auto readState = [&](std::uint64_t& v) {
+            return readNumericProp(SCRSDK::CrDeviceProperty_RecordingState, v);
+        };
+        std::uint64_t state = 0;
+        if (!readState(state))
+            return Result::fail("recording state not available");
+        outState = recordingStateName(state);
+
+        if (op == "status") return Result::success();
+        if (op != "start" && op != "stop")
+            return Result::fail("unknown record op: " + op);
+
+        const bool wantRecording = op == "start";
+        if ((state == SCRSDK::CrMovie_Recording_State_Recording) ==
+            wantRecording)
+            return Result::success();  // already in the requested state
+
+        CrError err = SCRSDK::SendCommand(
+            handle_, SCRSDK::CrCommandId_MovieRecord, SCRSDK::CrCommandParam_Down);
+        if (err != SCRSDK::CrError_None)
+            return Result::fail("record command failed: " + crErrorString(err));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        SCRSDK::SendCommand(handle_, SCRSDK::CrCommandId_MovieRecord,
+                            SCRSDK::CrCommandParam_Up);
+
+        // Starting is quick; stopping can take a while to finalize the file.
+        const int tries = wantRecording ? 50 : 100;
+        for (int i = 0; i < tries; ++i) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            if (!readState(state)) continue;
+            outState = recordingStateName(state);
+            if (state == SCRSDK::CrMovie_Recording_State_Recording_Failed)
+                return Result::fail(
+                    "camera reports recording failed (check the memory card "
+                    "and that the camera is in a movie mode)");
+            if ((state == SCRSDK::CrMovie_Recording_State_Recording) ==
+                wantRecording)
+                return Result::success();
+        }
+        return Result::fail("camera did not " + op + " recording (state: " +
+                            outState +
+                            "); is the camera in a movie mode with a card?");
+    }
+
     Result focus(const std::string& op, int steps,
                  std::string& outStatus) override {
-        if (handle_ == 0) return Result::fail("not connected");
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
 
         if (op == "status") {
             std::uint64_t v = 0;
@@ -813,7 +948,8 @@ public:
     }
 
     Result capture(const std::string& saveDir, std::string& outFile) override {
-        if (handle_ == 0) return Result::fail("not connected");
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
         std::string dir = saveDir.empty() ? std::string(".") : saveDir;
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
@@ -828,10 +964,14 @@ public:
         Result dest = ensureHostPcStoreDestination();
         if (!dest.ok) return dest;
 
-        // The camera silently drops the release while it settles after a mode
-        // change, so retry until an image actually arrives.
+        // The camera silently drops the release while it settles after a
+        // mode change. CrNotify_Captured_Event tells us whether the shutter
+        // actually fired: no event within ~2s means the release was dropped,
+        // so retry; once it fires, just wait for the download (never
+        // re-release, to avoid taking a second shot).
         callback_.armDownload();
-        for (int attempt = 0; attempt < 3; ++attempt) {
+        bool fired = false;
+        for (int attempt = 0; attempt < 5 && !fired; ++attempt) {
             CrError err = SCRSDK::SendCommand(
                 handle_, SCRSDK::CrCommandId_Release, SCRSDK::CrCommandParam_Down);
             if (err != SCRSDK::CrError_None)
@@ -839,16 +979,23 @@ public:
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             SCRSDK::SendCommand(handle_, SCRSDK::CrCommandId_Release,
                                 SCRSDK::CrCommandParam_Up);
-            if (callback_.waitDownload(10, outFile)) return Result::success();
+            fired = callback_.waitCaptured(2000);
         }
-        return Result::fail(
-            "shutter released but no image arrived: the camera may not be in "
-            "a still-image mode, or autofocus could not lock and blocked the "
-            "release (try 'set focus_mode mf')");
+        if (!fired)
+            return Result::fail(
+                "the camera refused the shutter release: it may not be in a "
+                "still-image mode, or autofocus could not lock (try 'focus "
+                "af' first, or 'set focus_mode mf')");
+        if (!callback_.waitDownload(30, outFile))
+            return Result::fail(
+                "the shot was taken but no file arrived within 30s (check "
+                "the memory card and USB connection)");
+        return Result::success();
     }
 
     Result liveviewFrame(const std::string& path) override {
-        if (handle_ == 0) return Result::fail("not connected");
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
         SCRSDK::CrLiveViewProperty* props = nullptr;
         CrInt32 num = 0;
         CrError err = SCRSDK::GetLiveViewProperties(handle_, &props, &num);
@@ -877,6 +1024,19 @@ public:
     }
 
 private:
+    Result teardown() {
+        if (handle_ != 0) {
+            SCRSDK::Disconnect(handle_);
+            SCRSDK::ReleaseDevice(handle_);
+            handle_ = 0;
+        }
+        if (camera_) {
+            camera_->Release();
+            camera_ = nullptr;
+        }
+        return Result::success();
+    }
+
     // Reads a CrDataType_STR property (length-prefixed UTF-16). Returns ""
     // when the property is unsupported or empty.
     std::string readStringProp(CrInt32u code) {
@@ -984,6 +1144,8 @@ private:
     }
 
     bool sdkInit_ = false;
+    bool userDisconnected_ = false;
+    bool connecting_ = false;
     SCRSDK::ICrCameraObjectInfo* camera_ = nullptr;
     SCRSDK::CrDeviceHandle handle_ = 0;
     Callback callback_;
