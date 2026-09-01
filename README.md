@@ -97,23 +97,26 @@ an a7C II (SDK v2.02.00):
    sample-app archives — the one you need is `RemoteCli.zip`:
 
    ```sh
-   mkdir -p /tmp/sonycam-crsdk && cd /tmp/sonycam-crsdk
+   mkdir -p ~/sdk/sonycam-crsdk && cd ~/sdk/sonycam-crsdk
    unzip ~/Downloads/Camera_Remote_SDK_*.zip
    unzip RemoteCli.zip     # -> RemoteCli/ with app/CRSDK headers
                            #    and external/crsdk/libCr_Core.dylib (+ CrAdapter/)
    ```
+
+   Keep it somewhere permanent (not `/tmp`): the build links against this
+   location, and macOS wipes `/tmp` on reboot.
 
    **macOS:** Sony's dylibs are only ad-hoc signed (no notarization), so if
    the zip came from a browser, Gatekeeper's quarantine flag will make macOS
    refuse to load them ("cannot verify the developer"). Strip it once:
 
    ```sh
-   xattr -dr com.apple.quarantine /tmp/sonycam-crsdk/RemoteCli
+   xattr -dr com.apple.quarantine ~/sdk/sonycam-crsdk/RemoteCli
    ```
 3. Point the build at the extracted `RemoteCli` directory:
 
    ```sh
-   cmake -B build -DSONY_SDK_DIR=/tmp/sonycam-crsdk/RemoteCli
+   cmake -B build -DSONY_SDK_DIR=~/sdk/sonycam-crsdk/RemoteCli
    cmake --build build -j
    ```
 
