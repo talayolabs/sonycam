@@ -8,8 +8,13 @@ M = an afternoon, L = larger.
 
 | # | Item | Effort | Why |
 |---|------|--------|-----|
+| 18 | **Card contents access** — browse the memory card, pull RAW/video files, thumbnails, delete (`GetDateFolderList`/`PullContentsFile`) | M-L | Biggest gap: capture only downloads the JPEG rendition; RAWs and clips are stranded on the card. |
+| 17 | **AF area positioning by coordinates** (`AF_Area_Position` control code) — touch-to-focus at liveview x/y | M | Pairs with agent vision loops: "focus there". |
+| 19 | **Zoom+focus position memories** (`Save/LoadZoomAndFocusPosition`) — in-camera focus recall slots | S-M | Closest thing to "memories" the SDK offers; ideal for fixed-subject shoots. |
+| 20 | **Custom WB capture** (`CustomWBCapture` + standby) — meter WB off a gray card | S-M | Completes the WB story next to color_temp. |
+| 21 | **Display string lists** — camera-rendered names for PP/Creative Look etc. | S | Nicer agent output than enum guesses. |
+| 22 | **Maintenance ops** — card format (full/quick), new folder, file-number reset, power off, sensor cleaning | S | Operational hygiene commands. |
 | 11b | **Wi-Fi validation** — transport reporting is real now, but only USB is hardware-tested | M | Needs camera Wi-Fi pairing. |
-| 17 | **AF area positioning by coordinates** (`AF_Area_Position`) — touch-to-focus at liveview x/y | M | Pairs well with agent vision loops. |
 
 ## Done (this effort)
 
