@@ -38,7 +38,10 @@ Supported properties: `iso`, `aperture`, `shutter_speed`, `exposure_comp`,
 the binary, no external assets) that lists every property with its current
 value and valid choices. Changing a control applies it to the camera
 immediately — no submit button — and the page polls so external changes
-(CLI, camera dials) show up live.
+(CLI, camera dials) show up live. The page also shows a live-view feed
+(continuously refreshed frames from the camera; an animated test pattern in
+fake mode) and a Capture button that triggers the shutter
+(`POST /api/capture`, honoring the priority-key gate).
 
 ```
 sonycam --ui                  # http://127.0.0.1:3000

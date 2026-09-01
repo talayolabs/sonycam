@@ -28,6 +28,7 @@ public:
 private:
     bool connected_ = false;
     int captureCount_ = 0;
+    int liveviewCount_ = 0;
     struct FakeProp {
         std::string value;
         std::vector<std::string> choices;  // empty => free-form numeric

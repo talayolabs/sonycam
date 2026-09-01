@@ -130,6 +130,13 @@ check "ui rejects invalid value" \
   sh -c "curl -s -m 5 -X POST -d '{\"prop\":\"iso\",\"value\":\"nope\"}' http://127.0.0.1:$UI_PORT/api/set | grep -q '\"ok\":false'"
 check "ui 404s unknown path" \
   sh -c "curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:$UI_PORT/nope | grep -q 404"
+check "ui POST /api/capture" \
+  sh -c "curl -sf -m 5 -X POST -d '{\"dir\":\"$WORK/uishots\"}' http://127.0.0.1:$UI_PORT/api/capture | grep -q '\"file\"'"
+check "ui capture wrote a file" sh -c "ls '$WORK/uishots' | grep -q JPG"
+check "ui GET /api/liveview returns an image" \
+  sh -c "curl -sf -m 5 -o '$WORK/lv1.img' http://127.0.0.1:$UI_PORT/api/liveview && [ -s '$WORK/lv1.img' ]"
+check "ui liveview frames change between requests" \
+  sh -c "curl -sf -m 5 -o '$WORK/lv2.img' http://127.0.0.1:$UI_PORT/api/liveview && ! cmp -s '$WORK/lv1.img' '$WORK/lv2.img'"
 kill "$UI_PID" 2>/dev/null
 wait "$UI_PID" 2>/dev/null
 

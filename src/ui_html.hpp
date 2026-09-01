@@ -53,6 +53,25 @@ inline const char kUiHtml[] = R"SONYCAM_HTML(<!DOCTYPE html>
     max-width: 90vw;
   }
   #toast.show { opacity: 1; }
+  #toast.ok { background: var(--ok); color: #04220f; }
+  #lv {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px; margin-bottom: 16px;
+  }
+  #lvImg {
+    display: block; width: 100%; border-radius: 6px; background: #000;
+    aspect-ratio: 16 / 9; object-fit: contain;
+  }
+  #lvImg.stale { opacity: .35; }
+  #lvBar { display: flex; align-items: center; justify-content: space-between;
+           margin-top: 10px; }
+  #lvBar .cap { color: var(--muted); font-size: .8rem; }
+  #captureBtn {
+    background: var(--accent); color: #1a0d00; border: none; border-radius: 8px;
+    padding: 9px 20px; font-size: .95rem; font-weight: 600; cursor: pointer;
+  }
+  #captureBtn:hover { filter: brightness(1.1); }
+  #captureBtn:disabled { opacity: .5; cursor: default; }
 </style>
 </head>
 <body>
@@ -61,6 +80,13 @@ inline const char kUiHtml[] = R"SONYCAM_HTML(<!DOCTYPE html>
   <div id="status"><span class="dot"></span><span id="statusText">connecting…</span></div>
 </header>
 <p id="hint">Changes apply to the camera immediately.</p>
+<div id="lv">
+  <img id="lvImg" alt="live view">
+  <div id="lvBar">
+    <span class="cap">live view</span>
+    <button id="captureBtn">&#9210; Capture</button>
+  </div>
+</div>
 <div id="props"></div>
 <div id="toast"></div>
 <script>
@@ -72,8 +98,9 @@ const toastEl = document.getElementById("toast");
 let toastTimer = null;
 let pending = 0;
 
-function toast(msg) {
+function toast(msg, ok) {
   toastEl.textContent = msg;
+  toastEl.classList.toggle("ok", !!ok);
   toastEl.classList.add("show");
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 4000);
@@ -184,8 +211,38 @@ async function refresh() {
   }
 }
 
+const lvImg = document.getElementById("lvImg");
+const captureBtn = document.getElementById("captureBtn");
+
+function lvTick() {
+  const i = new Image();
+  i.onload = () => {
+    lvImg.src = i.src;
+    lvImg.classList.remove("stale");
+    setTimeout(lvTick, 200);
+  };
+  i.onerror = () => {
+    lvImg.classList.add("stale");
+    setTimeout(lvTick, 1500);
+  };
+  i.src = "/api/liveview?t=" + Date.now();
+}
+
+captureBtn.addEventListener("click", async () => {
+  captureBtn.disabled = true;
+  try {
+    const r = await api("/api/capture", {});
+    toast("captured" + (r.file ? ": " + r.file : ""), true);
+  } catch (e) {
+    toast("capture: " + e.message);
+  } finally {
+    captureBtn.disabled = false;
+  }
+});
+
 refresh();
 setInterval(refresh, 2000);
+lvTick();
 </script>
 </body>
 </html>

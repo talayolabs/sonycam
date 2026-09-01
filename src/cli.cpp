@@ -16,6 +16,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -215,6 +216,21 @@ void httpJson(int fd, const json& resp) {
               "application/json", resp.dump());
 }
 
+bool readFile(const std::string& path, std::string& out) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+    out.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    return !out.empty();
+}
+
+const char* imageContentType(const std::string& data) {
+    if (data.size() >= 2 && static_cast<unsigned char>(data[0]) == 0xFF &&
+        static_cast<unsigned char>(data[1]) == 0xD8)
+        return "image/jpeg";
+    if (data.size() >= 2 && data[0] == 'B' && data[1] == 'M') return "image/bmp";
+    return "application/octet-stream";
+}
+
 void serveHttpClient(int fd, const std::string& socketPath) {
     std::string buf;
     char chunk[4096];
@@ -270,6 +286,32 @@ void serveHttpClient(int fd, const std::string& socketPath) {
                                 json{{"cmd", "set"},
                                      {"prop", req.value("prop", "")},
                                      {"value", req.value("value", "")}}));
+    } else if (method == "POST" && path == "/api/capture") {
+        json creq{{"cmd", "capture"}};
+        if (!body.empty()) {
+            try {
+                json b = json::parse(body);
+                if (b.contains("dir")) creq["dir"] = b["dir"];
+            } catch (...) {
+                httpJson(fd, json{{"ok", false}, {"error", "bad JSON body"}});
+                return;
+            }
+        }
+        httpJson(fd, daemonCall(socketPath, creq));
+    } else if (method == "GET" &&
+               (path == "/api/liveview" ||
+                path.rfind("/api/liveview?", 0) == 0)) {
+        const std::string frame = socketPath + ".uiframe";
+        json resp = daemonCall(socketPath,
+                               json{{"cmd", "liveview"}, {"path", frame}});
+        std::string data;
+        if (!resp.value("ok", false)) {
+            httpJson(fd, resp);
+        } else if (!readFile(frame, data)) {
+            httpJson(fd, json{{"ok", false}, {"error", "cannot read live-view frame"}});
+        } else {
+            httpReply(fd, 200, "OK", imageContentType(data), data);
+        }
     } else {
         httpReply(fd, 404, "Not Found", "text/plain", "not found\n");
     }
