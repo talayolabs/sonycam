@@ -32,10 +32,19 @@ sonycam focus near|far [N]        manual-focus nudge N steps (requires focus_mod
 sonycam focus position            read absolute focus position + valid range
 sonycam focus position <V>        drive the lens to position V (requires mf);
                                   waits for arrival and reports the final position
+sonycam focus at X Y              move the AF area to X,Y (0-1 fractions of the
+                                  frame) and lock — "focus there" for vision loops
+sonycam focus save|recall <slot>  in-camera focus position memories (verified:
+                                  recall drives the lens back to the saved spot)
 sonycam focus status              current focus indication (unlocked/focused/tracking)
 sonycam record start|stop|status  movie recording (camera must be in a movie mode)
 sonycam zoom in|out [MS] | stop   power zoom (fails cleanly on mechanical lenses)
 sonycam preset save|load <file>   save/restore the FULL camera configuration
+sonycam files list                list photos/videos on the memory card
+sonycam files pull <name> [--dir DIR]
+                                  download any card file, RAW and video included
+sonycam wb capture                meter custom WB at frame center (requires
+                                  'set white_balance custom_1' first + light)
 sonycam capture [--dir DIR] [--count N] [--interval SECS]
                                   fire the shutter; N shots SECS apart
 sonycam liveview <out.jpg>        save one live-view frame (fast, no shutter)
@@ -112,10 +121,11 @@ alternative.
    ring. Only power-zoom (PZ) lenses can zoom remotely.
 3. **Control aperture while the lens's aperture ring is off "A".** The
    physical ring always wins; ask the human to move it to "A".
-4. **Download RAW files or video clips.** `capture` only receives the JPEG
-   rendition the camera transfers; RAWs and movie files stay on the memory
-   card (SDK supports card access, but this CLI does not implement it yet —
-   see BACKLOG #18). A human must offload the card.
+4. **Download RAW/video as part of `capture`.** capture only receives the
+   JPEG rendition. RAWs and clips ARE retrievable afterwards with
+   `files pull <name>`, but be aware it switches the camera out of remote
+   mode for the duration (~15s overhead + transfer time; no shooting
+   meanwhile) and reconnects when done.
 5. **Make remote overrides survive a reconnect.** exposure_program and
    friends silently revert to the physical dial after any disconnect,
    replug, or camera reboot. Re-apply them (or use `preset load`).
@@ -199,6 +209,13 @@ shown as hex and can be passed back to `set` verbatim.
   human must confirm it. Warn the user before loading.
 - Movie fps choices follow the camera's NTSC/PAL setting (NTSC: 24p/30p/
   60p; PAL: 25p/50p/100p) — always trust `get movie_fps` choices.
+- `files list/pull` reconnect the camera in contents mode: expect ~15s
+  before results and no remote control until the command returns. Pull
+  waits up to 5 minutes (large videos take a while over USB).
+- `wb capture` needs `white_balance custom_1` selected first, a neutral
+  target, and decent light; the camera legitimately rejects bad readings.
+- `focus at` works with any AF area on the a7C II (locks as `tracking`);
+  if the camera rejects the position, try `set focus_area spot_m`.
 - `iso_auto_min`/`iso_auto_max` and `log_shooting` exist in the CLI but the
   a7C II rejects them over remote (absent from `props`); set Auto ISO
   limits on the camera body.

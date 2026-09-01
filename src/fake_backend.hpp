@@ -24,6 +24,10 @@ public:
     Result record(const std::string& op, std::string& outState) override;
     Result zoom(const std::string& op, int ms) override;
     Result preset(const std::string& op, const std::string& path) override;
+    Result filesList(std::vector<FileEntry>& out) override;
+    Result filesPull(const std::string& name, const std::string& dir,
+                     std::string& outFile) override;
+    Result wbCapture(std::string& outStatus) override;
     Result focus(const std::string& op, int steps, std::string& outStatus) override;
     Result capture(const std::string& saveDir, std::string& outFile) override;
     Result liveviewFrame(const std::string& path) override;
@@ -33,6 +37,7 @@ private:
     bool recording_ = false;
     int focusPos_ = 500;
     int captureCount_ = 0;
+    std::vector<std::string> cardFiles_ = {"DSC00001.JPG", "DSC00001.ARW"};
     int liveviewCount_ = 0;
     struct FakeProp {
         std::string value;

@@ -216,6 +216,36 @@ Result FakeBackend::preset(const std::string& op, const std::string& path) {
     return Result::fail("unknown preset op: " + op);
 }
 
+Result FakeBackend::filesList(std::vector<FileEntry>& out) {
+    if (!connected_) return Result::fail("not connected");
+    for (const auto& n : cardFiles_)
+        out.push_back(FileEntry{n, sizeof(kTinyJpeg), "20260101T120000"});
+    return Result::success();
+}
+
+Result FakeBackend::filesPull(const std::string& name, const std::string& dir,
+                              std::string& outFile) {
+    if (!connected_) return Result::fail("not connected");
+    if (std::find(cardFiles_.begin(), cardFiles_.end(), name) ==
+        cardFiles_.end())
+        return Result::fail("no file named '" + name + "' on the memory card");
+    std::string d = dir.empty() ? std::string(".") : dir;
+    std::error_code ec;
+    std::filesystem::create_directories(d, ec);
+    outFile = d + "/" + name;
+    std::ofstream f(outFile, std::ios::binary);
+    if (!f) return Result::fail("cannot write " + outFile);
+    f.write(reinterpret_cast<const char*>(kTinyJpeg), sizeof(kTinyJpeg));
+    return Result::success();
+}
+
+Result FakeBackend::wbCapture(std::string& outStatus) {
+    if (!connected_) return Result::fail("not connected");
+    outStatus = "captured (stored in the camera's custom WB slot; "
+                "'set white_balance custom' to use it)";
+    return Result::success();
+}
+
 Result FakeBackend::record(const std::string& op, std::string& outState) {
     if (!connected_) return Result::fail("not connected");
     if (op == "start") recording_ = true;
@@ -243,6 +273,18 @@ Result FakeBackend::focus(const std::string& op, int steps, std::string& outStat
             return Result::fail("focus nudge requires focus_mode mf (current: " +
                                 mode + ")");
         outStatus = op + " x" + std::to_string(steps);
+        return Result::success();
+    }
+    if (op == "at") {
+        if (mode == "mf")
+            return Result::fail("autofocus requires an AF focus mode (current: mf)");
+        outStatus = "focused";
+        return Result::success();
+    }
+    if (op == "save" || op == "recall") {
+        if (steps < 1 || steps > 3)
+            return Result::fail("focus memories are not supported here");
+        outStatus = op + " slot " + std::to_string(steps);
         return Result::success();
     }
     if (op == "position") {

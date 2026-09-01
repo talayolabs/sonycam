@@ -49,10 +49,16 @@ const char kUsage[] =
     "  focus af                   autofocus (half-press), waits for lock\n"
     "  focus near|far [N]         manual-focus nudge N steps (needs focus_mode mf)\n"
     "  focus position [V]         read or drive to an absolute focus position\n"
+    "  focus at X Y               move the AF area to X,Y (0-1 fractions) and lock\n"
+    "  focus save|recall <slot>   in-camera zoom+focus position memories\n"
     "  focus status               current focus indication\n"
     "  record start|stop|status   movie recording (camera must be in a movie mode)\n"
     "  zoom in|out [MS] | stop    power zoom for MS milliseconds (PZ lenses only)\n"
     "  preset save|load <file>    save/restore the full camera configuration\n"
+    "  files list                 list photos/videos on the memory card\n"
+    "  files pull <name> [--dir DIR]\n"
+    "                             download a file (RAW/video too) from the card\n"
+    "  wb capture                 capture custom white balance at frame center\n"
     "  capture [--dir DIR] [--count N] [--interval SECS]\n"
     "                             trigger the shutter (N shots, SECS apart)\n"
     "  liveview <out.jpg> [--follow [--frames N]]\n"
@@ -196,6 +202,19 @@ int printResult(const std::string& cmd, const json& resp, bool jsonOut) {
         std::printf("preset %s: %s\n",
                     result.value("op", "") == "save" ? "saved" : "loaded",
                     result.value("file", "").c_str());
+    } else if (cmd == "files") {
+        if (result.contains("files")) {
+            for (const auto& f : result["files"])
+                std::printf("%-28s %12llu  %s\n",
+                            f.value("name", "").c_str(),
+                            static_cast<unsigned long long>(
+                                f.value("size", 0ULL)),
+                            f.value("date", "").c_str());
+        } else {
+            std::printf("pulled: %s\n", result.value("file", "").c_str());
+        }
+    } else if (cmd == "wb") {
+        std::printf("wb: %s\n", result.value("status", "").c_str());
     } else if (cmd == "capture") {
         if (result.contains("files") && result["files"].size() > 1) {
             for (const auto& f : result["files"])
@@ -443,14 +462,45 @@ int main(int argc, char** argv) {
         if (args.size() != 3) { std::fprintf(stderr, "usage: sonycam set <prop> <value>\n"); return 2; }
         req = {{"cmd", "set"}, {"prop", args[1]}, {"value", args[2]}};
     } else if (cmd == "focus") {
-        if (args.size() < 2 || args.size() > 3) {
+        if (args.size() < 2 || args.size() > 4) {
             std::fprintf(stderr,
-                         "usage: sonycam focus af|near|far|position|status "
-                         "[value]\n");
+                         "usage: sonycam focus af|near|far|position|at|save|"
+                         "recall|status [value]\n");
             return 2;
         }
         int steps = args[1] == "position" ? -1 : 1;
-        if (args.size() == 3) {
+        if (args[1] == "at") {
+            if (args.size() != 4) {
+                std::fprintf(stderr,
+                             "usage: sonycam focus at X Y  (0-1 fractions or "
+                             "pixels in 640x480)\n");
+                return 2;
+            }
+            double xf = -1, yf = -1;
+            try {
+                xf = std::stod(args[2]);
+                yf = std::stod(args[3]);
+            } catch (...) {}
+            int x = xf <= 1.0 ? static_cast<int>(xf * 639) : static_cast<int>(xf);
+            int y = yf <= 1.0 ? static_cast<int>(yf * 479) : static_cast<int>(yf);
+            if (xf < 0 || yf < 0 || x > 639 || y > 479) {
+                std::fprintf(stderr,
+                             "X must be 0-1 (or 0-639), Y 0-1 (or 0-479)\n");
+                return 2;
+            }
+            steps = (x << 16) | y;
+        } else if (args[1] == "save" || args[1] == "recall") {
+            if (args.size() != 3) {
+                std::fprintf(stderr, "usage: sonycam focus %s <slot>\n",
+                             args[1].c_str());
+                return 2;
+            }
+            try { steps = std::stoi(args[2]); } catch (...) { steps = 0; }
+            if (steps < 1 || steps > 99) {
+                std::fprintf(stderr, "slot must be 1-99\n");
+                return 2;
+            }
+        } else if (args.size() == 3) {
             try { steps = std::stoi(args[2]); } catch (...) { steps = -1; }
             if (args[1] == "position") {
                 if (steps < 0 || steps > 65535) {
@@ -491,6 +541,25 @@ int main(int argc, char** argv) {
             return 2;
         }
         req = {{"cmd", "preset"}, {"op", args[1]}, {"path", args[2]}};
+    } else if (cmd == "files") {
+        if (args.size() == 2 && args[1] == "list") {
+            req = {{"cmd", "files"}, {"op", "list"}};
+        } else if (args.size() >= 3 && args[1] == "pull") {
+            req = {{"cmd", "files"}, {"op", "pull"}, {"name", args[2]}};
+            for (size_t i = 3; i + 1 < args.size(); ++i)
+                if (args[i] == "--dir") req["dir"] = args[i + 1];
+        } else {
+            std::fprintf(stderr,
+                         "usage: sonycam files list | files pull <name> "
+                         "[--dir DIR]\n");
+            return 2;
+        }
+    } else if (cmd == "wb") {
+        if (args.size() != 2 || args[1] != "capture") {
+            std::fprintf(stderr, "usage: sonycam wb capture\n");
+            return 2;
+        }
+        req = {{"cmd", "wb_capture"}};
     } else if (cmd == "capture") {
         req = {{"cmd", "capture"}};
         for (size_t i = 1; i < args.size(); ++i) {

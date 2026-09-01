@@ -26,6 +26,10 @@ sonycam record start              # movie recording (movie mode)
 sonycam zoom in 500               # power zoom (PZ lenses)
 sonycam capture --dir ~/photos    # trigger the shutter
 sonycam capture --count 5 --interval 2   # burst / timelapse
+sonycam files list                # what's on the memory card
+sonycam files pull C0034.MP4      # download RAW/video from the card
+sonycam focus at 0.3 0.5          # touch-AF at frame coordinates
+sonycam wb capture                # custom white balance reading
 sonycam liveview frame.jpg        # save one live-view frame
 sonycam liveview f.jpg --follow   # stream frames until ctrl-c
 sonycam --json props              # machine-readable output for agents
@@ -238,9 +242,11 @@ Reference material (not dependencies): [crsdk.app property docs](https://crsdk.a
   capture with image download, live view, gear identification.
 - Wi-Fi: `status` reports the real transport, but only USB has been
   hardware-tested.
-- Capture downloads the JPEG rendition; RAW files stay on the memory card.
-- Not exposed yet (SDK supports them): FTP transfer, custom white-balance
-  capture, AF area positioning by coordinates.
+- Capture downloads the JPEG rendition; use `files pull` to retrieve RAWs
+  and videos afterwards (temporarily switches the camera out of remote
+  mode).
+- Not exposed yet (SDK supports them): FTP transfer, movie playback,
+  LUT import, display string lists.
 - Value codecs for shutter/ISO/EV follow the SDK header conventions; exact
   accepted values depend on the camera mode (e.g. aperture is not writable
   in S mode, most exposure props are locked in full Auto).

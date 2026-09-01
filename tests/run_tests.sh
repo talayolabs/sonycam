@@ -150,6 +150,20 @@ print(json.dumps({'ok': d['ok'], 'result': {'name': d['result']['name'],
 check_fails "preset load missing file" "$SONYCAM" preset load "$WORK/nope.preset"
 check "restore iso auto" "$SONYCAM" set iso auto
 
+# --- card files ---
+check_output "files list shows card contents" "2" \
+  sh -c "'$SONYCAM' files list | wc -l | tr -d ' '"
+check "files pull" "$SONYCAM" files pull DSC00001.ARW --dir "$WORK/pulled"
+check "pulled file exists" test -s "$WORK/pulled/DSC00001.ARW"
+check_fails "files pull unknown name" "$SONYCAM" files pull NOPE.JPG
+
+# --- custom WB capture + touch AF + focus memories ---
+check "wb capture" "$SONYCAM" wb capture
+check_output "focus at locks" "focus: focused" "$SONYCAM" focus at 0.5 0.5
+check_output "focus save slot" "focus: save slot 1" "$SONYCAM" focus save 1
+check_output "focus recall slot" "focus: recall slot 1" "$SONYCAM" focus recall 1
+check_fails "focus recall bad slot" "$SONYCAM" focus recall 9
+
 # --- burst capture + liveview streaming ---
 check "capture --count 3" "$SONYCAM" capture --dir "$WORK/burst" --count 3
 check "burst wrote 3 files" test "$(ls "$WORK/burst" | wc -l)" -eq 3

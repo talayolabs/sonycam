@@ -22,6 +22,12 @@ struct PropInfo {
     std::vector<std::string> choices;  // allowed values if enumerable (may be empty)
 };
 
+struct FileEntry {
+    std::string name;        // e.g. "DSC03616.JPG"
+    std::uint64_t size = 0;  // bytes
+    std::string date;        // camera-reported timestamp
+};
+
 struct CameraInfo {
     bool connected = false;
     std::string model;
@@ -58,6 +64,15 @@ public:
     // Full camera configuration as a file. op: "save" (camera -> `path`)
     // or "load" (`path` -> camera).
     virtual Result preset(const std::string& op, const std::string& path) = 0;
+
+    // Memory-card contents. May reconnect the camera in a different SDK
+    // mode, which interrupts remote control for the duration of the call.
+    virtual Result filesList(std::vector<FileEntry>& out) = 0;
+    virtual Result filesPull(const std::string& name, const std::string& dir,
+                             std::string& outFile) = 0;
+
+    // Capture a custom white balance reading at the frame center.
+    virtual Result wbCapture(std::string& outStatus) = 0;
 
     // Focus control. op: "af" (half-press, wait for lock, release),
     // "near"/"far" (manual-focus nudges, `steps` times), "status" (read the

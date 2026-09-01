@@ -93,6 +93,31 @@ json handle(CameraBackend& cam, const json& req, bool& shutdown) {
         if (r.ok) resp["result"] = {{"state", state}};
     } else if (cmd == "zoom") {
         r = cam.zoom(req.value("op", ""), req.value("ms", 300));
+    } else if (cmd == "files") {
+        const std::string op = req.value("op", "");
+        if (op == "list") {
+            std::vector<FileEntry> files;
+            r = cam.filesList(files);
+            if (r.ok) {
+                json arr = json::array();
+                for (const auto& f : files)
+                    arr.push_back({{"name", f.name},
+                                   {"size", f.size},
+                                   {"date", f.date}});
+                resp["result"] = {{"files", arr}};
+            }
+        } else if (op == "pull") {
+            std::string outFile;
+            r = cam.filesPull(req.value("name", ""), req.value("dir", ""),
+                              outFile);
+            if (r.ok) resp["result"] = {{"file", outFile}};
+        } else {
+            return {{"ok", false}, {"error", "unknown files op: " + op}};
+        }
+    } else if (cmd == "wb_capture") {
+        std::string status;
+        r = cam.wbCapture(status);
+        if (r.ok) resp["result"] = {{"status", status}};
     } else if (cmd == "preset") {
         r = cam.preset(req.value("op", ""), req.value("path", ""));
         if (r.ok)

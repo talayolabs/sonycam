@@ -716,6 +716,19 @@ public:
             std::fprintf(stderr, "sonycamd: camera reconnected\n");
             return;
         }
+        if (warning == SCRSDK::CrWarning_CustomWBCapture_Result_OK) {
+            std::lock_guard<std::mutex> lk(m_);
+            wbResult_ = 1;
+            cv_.notify_all();
+            return;
+        }
+        if (warning == SCRSDK::CrWarning_CustomWBCapture_Result_NG ||
+            warning == SCRSDK::CrWarning_CustomWBCapture_Result_Invalid) {
+            std::lock_guard<std::mutex> lk(m_);
+            wbResult_ = -1;
+            cv_.notify_all();
+            return;
+        }
         if (warning == SCRSDK::CrWarning_CameraSettings_Read_Result_OK) {
             std::lock_guard<std::mutex> lk(m_);
             settingsResult_ = 1;
@@ -733,6 +746,16 @@ public:
         std::fprintf(stderr, "sonycamd: camera warning 0x%08x\n", warning);
     }
     void OnCompleteDownload(CrChar* filename, CrInt32u) override {
+        std::lock_guard<std::mutex> lk(m_);
+        downloadedFile_ = filename ? reinterpret_cast<const char*>(filename) : "";
+        downloadDone_ = true;
+        cv_.notify_all();
+    }
+    // Contents-transfer pulls signal completion through this callback
+    // instead of OnCompleteDownload.
+    void OnNotifyContentsTransfer(CrInt32u notify, SCRSDK::CrContentHandle,
+                                  CrChar* filename) override {
+        if (notify != SCRSDK::CrNotify_ContentsTransfer_Complete) return;
         std::lock_guard<std::mutex> lk(m_);
         downloadedFile_ = filename ? reinterpret_cast<const char*>(filename) : "";
         downloadDone_ = true;
@@ -778,6 +801,16 @@ public:
         std::lock_guard<std::mutex> lk(m_);
         settingsResult_ = 0;
     }
+    void armWbResult() {
+        std::lock_guard<std::mutex> lk(m_);
+        wbResult_ = 0;
+    }
+    int waitWbResult(int timeoutSec) {
+        std::unique_lock<std::mutex> lk(m_);
+        cv_.wait_for(lk, std::chrono::seconds(timeoutSec),
+                     [&] { return wbResult_ != 0; });
+        return wbResult_;
+    }
     // 1 = ok, -1 = rejected, 0 = no confirmation within the timeout
     int waitSettingsResult(int timeoutSec) {
         std::unique_lock<std::mutex> lk(m_);
@@ -811,6 +844,7 @@ private:
     bool downloadDone_ = false;
     bool capturedEvent_ = false;
     int settingsResult_ = 0;
+    int wbResult_ = 0;
     std::string downloadedFile_;
 };
 
@@ -861,19 +895,25 @@ public:
     }
 
     Result connect() override {
+        return connectMode(SCRSDK::CrSdkControlMode_Remote);
+    }
+
+    Result connectMode(SCRSDK::CrSdkControlMode mode) {
         userDisconnected_ = false;
         if (handle_ != 0) {
-            if (callback_.isConnected() && !callback_.isReconnecting())
+            if (callback_.isConnected() && !callback_.isReconnecting() &&
+                mode_ == mode)
                 return Result::success();
-            teardown();  // stale handle from a dropped connection
+            teardown();  // stale handle or wrong SDK mode
         }
         connecting_ = true;
-        Result r = connectImpl();
+        Result r = connectImpl(mode);
         connecting_ = false;
+        if (r.ok) mode_ = mode;
         return r;
     }
 
-    Result connectImpl() {
+    Result connectImpl(SCRSDK::CrSdkControlMode mode) {
 #ifdef __APPLE__
         PtpCameraSuppressor suppressor;
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -910,7 +950,7 @@ public:
         if (!camera_) return Result::fail("CreateCameraObjectInfo failed");
 
         callback_.reset();
-        err = SCRSDK::Connect(camera_, &callback_, &handle_);
+        err = SCRSDK::Connect(camera_, &callback_, &handle_, mode);
         if (err != SCRSDK::CrError_None) {
             handle_ = 0;
             return Result::fail("Connect failed: " + crErrorString(err));
@@ -934,6 +974,9 @@ public:
                     }());
             return Result::fail("timed out waiting for camera connection");
         }
+
+        if (mode != SCRSDK::CrSdkControlMode_Remote)
+            return Result::success();  // property setup is Remote-mode only
 
         // On real bodies OnConnected fires before the property API is ready.
         // Wait for the priority property, then take the key and verify that
@@ -972,7 +1015,8 @@ public:
             return handle_ != 0 ? Result::success()
                                 : Result::fail("not connected");
         if (handle_ != 0 && callback_.isConnected() &&
-            !callback_.isReconnecting())
+            !callback_.isReconnecting() &&
+            mode_ == SCRSDK::CrSdkControlMode_Remote)
             return Result::success();
         if (userDisconnected_)
             return Result::fail("not connected (run 'sonycam connect')");
@@ -1272,6 +1316,163 @@ public:
         return Result::fail("unknown preset op: " + op);
     }
 
+    // Runs `fn` with the camera connected in ContentsTransfer mode, then
+    // restores the normal Remote session.
+    template <typename Fn>
+    Result withContentsMode(Fn fn) {
+        Result conn = connectMode(SCRSDK::CrSdkControlMode_ContentsTransfer);
+        if (!conn.ok) return conn;
+        Result out = fn();
+        teardown();
+        connect();  // best effort; the next command reconnects anyway
+        return out;
+    }
+
+    // The camera rejects contents requests while it is still building its
+    // MTP database right after the mode switch, so poll patiently.
+    CrError getDateFoldersRetry(SCRSDK::CrMtpFolderInfo** folders,
+                                CrInt32u* nFolders) {
+        CrError err = SCRSDK::CrError_Generic_Unknown;
+        for (int i = 0; i < 30; ++i) {  // up to ~15s
+            err = SCRSDK::GetDateFolderList(handle_, folders, nFolders);
+            if (err == SCRSDK::CrError_None) return err;
+            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        }
+        return err;
+    }
+
+    Result filesList(std::vector<FileEntry>& out) override {
+        return withContentsMode([&]() -> Result {
+            SCRSDK::CrMtpFolderInfo* folders = nullptr;
+            CrInt32u nFolders = 0;
+            CrError err = getDateFoldersRetry(&folders, &nFolders);
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("cannot list card folders: " +
+                                    crErrorString(err));
+            for (CrInt32u f = 0; f < nFolders; ++f) {
+                SCRSDK::CrContentHandle* contents = nullptr;
+                CrInt32u nContents = 0;
+                err = SCRSDK::GetContentsHandleList(handle_, folders[f].handle,
+                                                    &contents, &nContents);
+                if (err != SCRSDK::CrError_None || !contents) continue;
+                for (CrInt32u c = 0; c < nContents; ++c) {
+                    SCRSDK::CrMtpContentsInfo info;
+                    if (SCRSDK::GetContentsDetailInfo(handle_, contents[c],
+                                                      &info) !=
+                        SCRSDK::CrError_None)
+                        continue;
+                    FileEntry e;
+                    e.name = info.fileName
+                                 ? reinterpret_cast<const char*>(info.fileName)
+                                 : "";
+                    e.size = info.contentSize;
+                    e.date = std::string(info.dateChar,
+                                         strnlen(info.dateChar, 16));
+                    out.push_back(std::move(e));
+                }
+                SCRSDK::ReleaseContentsHandleList(handle_, contents);
+            }
+            if (folders) SCRSDK::ReleaseDateFolderList(handle_, folders);
+            return Result::success();
+        });
+    }
+
+    Result filesPull(const std::string& name, const std::string& dir,
+                     std::string& outFile) override {
+        std::string saveDir = dir.empty() ? std::string(".") : dir;
+        std::error_code ec;
+        std::filesystem::create_directories(saveDir, ec);
+        if (ec)
+            return Result::fail("cannot create " + saveDir + ": " + ec.message());
+        saveDir = std::filesystem::absolute(saveDir, ec).string();
+
+        return withContentsMode([&]() -> Result {
+            SCRSDK::CrMtpFolderInfo* folders = nullptr;
+            CrInt32u nFolders = 0;
+            CrError err = getDateFoldersRetry(&folders, &nFolders);
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("cannot list card folders: " +
+                                    crErrorString(err));
+            SCRSDK::CrContentHandle target = 0;
+            for (CrInt32u f = 0; f < nFolders && !target; ++f) {
+                SCRSDK::CrContentHandle* contents = nullptr;
+                CrInt32u nContents = 0;
+                err = SCRSDK::GetContentsHandleList(handle_, folders[f].handle,
+                                                    &contents, &nContents);
+                if (err != SCRSDK::CrError_None || !contents) continue;
+                for (CrInt32u c = 0; c < nContents && !target; ++c) {
+                    SCRSDK::CrMtpContentsInfo info;
+                    if (SCRSDK::GetContentsDetailInfo(handle_, contents[c],
+                                                      &info) !=
+                        SCRSDK::CrError_None)
+                        continue;
+                    if (info.fileName &&
+                        name == reinterpret_cast<const char*>(info.fileName))
+                        target = contents[c];
+                }
+                SCRSDK::ReleaseContentsHandleList(handle_, contents);
+            }
+            if (folders) SCRSDK::ReleaseDateFolderList(handle_, folders);
+            if (!target)
+                return Result::fail("no file named '" + name +
+                                    "' on the memory card");
+
+            callback_.armDownload();
+            err = SCRSDK::PullContentsFile(
+                handle_, target, SCRSDK::CrPropertyStillImageTransSize_Original,
+                const_cast<CrChar*>(saveDir.c_str()));
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("pull failed: " + crErrorString(err));
+            if (!callback_.waitDownload(300, outFile))  // videos can be huge
+                return Result::fail("transfer did not finish within 5 minutes");
+            return Result::success();
+        });
+    }
+
+    Result wbCapture(std::string& outStatus) override {
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
+        auto setU16 = [&](CrInt32u code, std::uint64_t v, SCRSDK::CrDataType t) {
+            CrDeviceProperty p;
+            p.SetCode(code);
+            p.SetValueType(t);
+            p.SetCurrentValue(v);
+            return SCRSDK::SetDeviceProperty(handle_, &p);
+        };
+        CrError err = setU16(SCRSDK::CrDeviceProperty_CustomWB_Capture_Standby,
+                             SCRSDK::CrPropertyCustomWBOperation_Enable,
+                             SCRSDK::CrDataType_UInt16);
+        if (err != SCRSDK::CrError_None)
+            return Result::fail(
+                "WB capture standby failed: " + crErrorString(err) +
+                " (run 'set white_balance custom_1' first)");
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+
+        callback_.armWbResult();
+        const std::uint64_t center = (320u << 16) | 240u;  // frame center
+        err = setU16(SCRSDK::CrDeviceProperty_CustomWB_Capture, center,
+                     SCRSDK::CrDataType_UInt32);
+        int result = 0;
+        if (err == SCRSDK::CrError_None)
+            result = callback_.waitWbResult(15);
+
+        setU16(SCRSDK::CrDeviceProperty_CustomWB_Capture_Standby_Cancel,
+               SCRSDK::CrPropertyCustomWBOperation_Enable,
+               SCRSDK::CrDataType_UInt16);
+
+        if (err != SCRSDK::CrError_None)
+            return Result::fail("WB capture failed: " + crErrorString(err));
+        if (result < 0)
+            return Result::fail(
+                "camera rejected the WB capture (aim at a neutral surface "
+                "with enough light and retry)");
+        if (result == 0)
+            return Result::fail("no WB capture confirmation within 15s");
+        outStatus = "captured (stored in the camera's custom WB slot; "
+                    "'set white_balance custom' to use it)";
+        return Result::success();
+    }
+
     Result focus(const std::string& op, int steps,
                  std::string& outStatus) override {
         Result conn = ensureConnected();
@@ -1315,6 +1516,64 @@ public:
                     "autofocus did not lock (" + state +
                     "); try more light, a different focus_area, or focus_mode "
                     "mf with 'focus near/far'");
+            return Result::success();
+        }
+
+        if (op == "at") {  // steps = (x << 16 | y), 640x480 space
+            CrDeviceProperty p;
+            p.SetCode(SCRSDK::CrDeviceProperty_AF_Area_Position);
+            p.SetValueType(SCRSDK::CrDataType_UInt32);
+            p.SetCurrentValue(static_cast<std::uint64_t>(
+                static_cast<std::uint32_t>(steps)));
+            CrError err = SCRSDK::SetDeviceProperty(handle_, &p);
+            if (err != SCRSDK::CrError_None)
+                return Result::fail(
+                    "cannot move the AF area: " + crErrorString(err) +
+                    " (try 'set focus_area spot_m' or a tracking area first)");
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
+            return focus("af", 1, outStatus);  // lock on the new position
+        }
+
+        if (op == "save" || op == "recall") {  // steps = memory slot
+            CrInt32u code = op == "save"
+                                ? SCRSDK::CrDeviceProperty_ZoomAndFocusPosition_Save
+                                : SCRSDK::CrDeviceProperty_ZoomAndFocusPosition_Load;
+            CrDeviceProperty* props = nullptr;
+            CrInt32 num = 0;
+            CrError err = SCRSDK::GetSelectDeviceProperties(
+                handle_, 1, &code, &props, &num);
+            if (err != SCRSDK::CrError_None || num == 0 || !props) {
+                if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
+                return Result::fail(
+                    "zoom/focus position memories are not supported here");
+            }
+            SCRSDK::CrDataType valueType = props[0].GetValueType();
+            bool writable = props[0].IsSetEnableCurrentValue();
+            SCRSDK::ReleaseDeviceProperties(handle_, props);
+            if (!writable)
+                return Result::fail(
+                    "focus memories are not available in the current mode");
+            CrDeviceProperty p;
+            p.SetCode(code);
+            p.SetValueType(valueType);
+            p.SetCurrentValue(static_cast<std::uint64_t>(steps));
+            err = SCRSDK::SetDeviceProperty(handle_, &p);
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("focus memory " + op + " failed: " +
+                                    crErrorString(err));
+            if (op == "recall") {  // wait for the lens drive to finish
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                for (int i = 0; i < 100; ++i) {
+                    std::uint64_t driving = 0;
+                    if (readNumericProp(
+                            SCRSDK::CrDeviceProperty_FocusDrivingStatus,
+                            driving) &&
+                        driving != SCRSDK::CrFocusDrivingStatus_Driving)
+                        break;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                }
+            }
+            outStatus = op + " slot " + std::to_string(steps);
             return Result::success();
         }
 
@@ -1668,6 +1927,7 @@ private:
     bool sdkInit_ = false;
     bool userDisconnected_ = false;
     bool connecting_ = false;
+    SCRSDK::CrSdkControlMode mode_ = SCRSDK::CrSdkControlMode_Remote;
     SCRSDK::ICrCameraObjectInfo* camera_ = nullptr;
     SCRSDK::CrDeviceHandle handle_ = 0;
     Callback callback_;

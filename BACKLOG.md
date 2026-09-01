@@ -8,15 +8,22 @@ M = an afternoon, L = larger.
 
 | # | Item | Effort | Why |
 |---|------|--------|-----|
-| 18 | **Card contents access** — browse the memory card, pull RAW/video files, thumbnails, delete (`GetDateFolderList`/`PullContentsFile`) | M-L | Biggest gap: capture only downloads the JPEG rendition; RAWs and clips are stranded on the card. |
-| 17 | **AF area positioning by coordinates** (`AF_Area_Position` control code) — touch-to-focus at liveview x/y | M | Pairs with agent vision loops: "focus there". |
-| 19 | **Zoom+focus position memories** (`Save/LoadZoomAndFocusPosition`) — in-camera focus recall slots | S-M | Closest thing to "memories" the SDK offers; ideal for fixed-subject shoots. |
-| 20 | **Custom WB capture** (`CustomWBCapture` + standby) — meter WB off a gray card | S-M | Completes the WB story next to color_temp. |
 | 21 | **Display string lists** — camera-rendered names for PP/Creative Look etc. | S | Nicer agent output than enum guesses. |
 | 22 | **Maintenance ops** — card format (full/quick), new folder, file-number reset, power off, sensor cleaning | S | Operational hygiene commands. |
 | 11b | **Wi-Fi validation** — transport reporting is real now, but only USB is hardware-tested | M | Needs camera Wi-Fi pairing. |
+| 23 | **files pull progress/multi-file** — `files pull --all --since DATE`, progress output for long video transfers | S-M | Pulls are silent for minutes on big clips. |
 
 ## Done (this effort)
+
+- #18 Card contents: `files list` / `files pull` via ContentsTransfer mode
+  switch (MTP-database retry, OnNotifyContentsTransfer completion;
+  verified 34MB ARW pull)
+- #17 Touch-AF: `focus at X Y` (AF_Area_Position + lock; verified locks
+  as tracking at arbitrary coordinates)
+- #19 In-camera focus memories: `focus save/recall <slot>` (verified:
+  recall drove the lens back to the saved position)
+- #20 Custom WB capture: `wb capture` (standby -> capture -> result
+  warnings; requires white_balance custom_1)
 
 - Video/AF property batch (choir-recipe coverage): movie_format/fps/quality,
   picture_profile, subject_recognition, recognition_target, eye_select,
