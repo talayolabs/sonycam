@@ -24,12 +24,33 @@ sonycam focus near 5              # manual-focus nudge (focus_mode mf)
 sonycam capture --dir ~/photos    # trigger the shutter
 sonycam liveview frame.jpg        # save one live-view frame
 sonycam --json props              # machine-readable output for agents
+sonycam --ui                      # web UI at http://127.0.0.1:3000
 sonycam daemon stop
 ```
 
 Supported properties: `iso`, `aperture`, `shutter_speed`, `exposure_comp`,
 `exposure_program`, `white_balance`, `focus_mode`, `focus_area`, `drive_mode`,
 `priority_key`.
+
+## Web UI
+
+`sonycam --ui [[HOST:]PORT]` serves a self-contained web page (embedded in
+the binary, no external assets) that lists every property with its current
+value and valid choices. Changing a control applies it to the camera
+immediately — no submit button — and the page polls so external changes
+(CLI, camera dials) show up live. The page also shows a live-view feed
+(continuously refreshed frames from the camera; an animated test pattern in
+fake mode) and a Capture button that triggers the shutter
+(`POST /api/capture`, honoring the priority-key gate).
+
+```
+sonycam --ui                  # http://127.0.0.1:3000
+sonycam --ui 8080             # http://127.0.0.1:8080
+sonycam --ui 0.0.0.0:3000     # listen on all interfaces (LAN access)
+```
+
+The server has no authentication; bind to `0.0.0.0` only on networks you
+trust.
 
 ## Build
 

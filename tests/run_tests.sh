@@ -110,6 +110,36 @@ check "set priority_key camera" "$SONYCAM" set priority_key camera
 check_fails "capture refused without pc_remote" "$SONYCAM" capture --dir "$WORK"
 check "set priority_key pc_remote" "$SONYCAM" set priority_key pc_remote
 
+# --- web ui ---
+UI_PORT=$(( (RANDOM % 20000) + 20000 ))
+"$SONYCAM" --ui "127.0.0.1:$UI_PORT" >/dev/null 2>&1 &
+UI_PID=$!
+for _ in $(seq 1 50); do
+  curl -sf -m 2 "http://127.0.0.1:$UI_PORT/api/status" >/dev/null 2>&1 && break
+  sleep 0.1
+done
+check "ui serves embedded html" \
+  sh -c "curl -sf -m 5 http://127.0.0.1:$UI_PORT/ | grep -q sonycam"
+check "ui GET /api/props" \
+  sh -c "curl -sf -m 5 http://127.0.0.1:$UI_PORT/api/props | grep -q '\"iso\"'"
+check "ui POST /api/set applies" \
+  sh -c "curl -sf -m 5 -X POST -d '{\"prop\":\"iso\",\"value\":\"1600\"}' http://127.0.0.1:$UI_PORT/api/set | grep -q '\"1600\"'"
+check_output "ui set visible via cli" "1600" \
+  sh -c "'$SONYCAM' get iso | awk 'NR==1{print \$2}'"
+check "ui rejects invalid value" \
+  sh -c "curl -s -m 5 -X POST -d '{\"prop\":\"iso\",\"value\":\"nope\"}' http://127.0.0.1:$UI_PORT/api/set | grep -q '\"ok\":false'"
+check "ui 404s unknown path" \
+  sh -c "curl -s -m 5 -o /dev/null -w '%{http_code}' http://127.0.0.1:$UI_PORT/nope | grep -q 404"
+check "ui POST /api/capture" \
+  sh -c "curl -sf -m 5 -X POST -d '{\"dir\":\"$WORK/uishots\"}' http://127.0.0.1:$UI_PORT/api/capture | grep -q '\"file\"'"
+check "ui capture wrote a file" sh -c "ls '$WORK/uishots' | grep -q JPG"
+check "ui GET /api/liveview returns an image" \
+  sh -c "curl -sf -m 5 -o '$WORK/lv1.img' http://127.0.0.1:$UI_PORT/api/liveview && [ -s '$WORK/lv1.img' ]"
+check "ui liveview frames change between requests" \
+  sh -c "curl -sf -m 5 -o '$WORK/lv2.img' http://127.0.0.1:$UI_PORT/api/liveview && ! cmp -s '$WORK/lv1.img' '$WORK/lv2.img'"
+kill "$UI_PID" 2>/dev/null
+wait "$UI_PID" 2>/dev/null
+
 # --- daemon stop ---
 check "daemon stop" "$SONYCAM" daemon stop
 

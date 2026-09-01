@@ -1,6 +1,7 @@
 #include "fake_backend.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -10,7 +11,45 @@ namespace sonycam {
 
 namespace {
 
-// Minimal valid 1x1 grayscale JPEG (used as the canned live-view frame).
+// Uncompressed 24-bit BMP test pattern that changes every frame, so the
+// simulated live view looks like a moving feed. Browsers and image viewers
+// render BMP natively; the real backend produces JPEG instead.
+void writeBmpFrame(std::ofstream& f, int frame) {
+    const int w = 320, h = 180;
+    const std::uint32_t rowBytes = w * 3;  // multiple of 4, no padding
+    const std::uint32_t dataSize = rowBytes * h;
+    const std::uint32_t fileSize = 54 + dataSize;
+    unsigned char hdr[54] = {};
+    hdr[0] = 'B'; hdr[1] = 'M';
+    hdr[2] = fileSize & 0xFF; hdr[3] = (fileSize >> 8) & 0xFF;
+    hdr[4] = (fileSize >> 16) & 0xFF; hdr[5] = (fileSize >> 24) & 0xFF;
+    hdr[10] = 54;              // pixel data offset
+    hdr[14] = 40;              // BITMAPINFOHEADER size
+    hdr[18] = w & 0xFF; hdr[19] = (w >> 8) & 0xFF;
+    hdr[22] = h & 0xFF; hdr[23] = (h >> 8) & 0xFF;
+    hdr[26] = 1;               // planes
+    hdr[28] = 24;              // bits per pixel
+    hdr[34] = dataSize & 0xFF; hdr[35] = (dataSize >> 8) & 0xFF;
+    hdr[36] = (dataSize >> 16) & 0xFF; hdr[37] = (dataSize >> 24) & 0xFF;
+    f.write(reinterpret_cast<const char*>(hdr), sizeof(hdr));
+    std::vector<unsigned char> row(rowBytes);
+    const int bar = (frame * 6) % w;
+    for (int y = h - 1; y >= 0; --y) {  // BMP rows are bottom-up
+        for (int x = 0; x < w; ++x) {
+            unsigned char r = static_cast<unsigned char>(((x + frame * 3) % w) * 255 / (w - 1));
+            unsigned char g = static_cast<unsigned char>(y * 255 / (h - 1));
+            unsigned char b = 96;
+            int d = x - bar; if (d < 0) d = -d;
+            if (d < 6) { r = g = b = 240; }
+            row[x * 3 + 0] = b;
+            row[x * 3 + 1] = g;
+            row[x * 3 + 2] = r;
+        }
+        f.write(reinterpret_cast<const char*>(row.data()), row.size());
+    }
+}
+
+// Minimal valid 1x1 grayscale JPEG (used as the canned capture file).
 const unsigned char kTinyJpeg[] = {
     0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
     0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
@@ -187,7 +226,7 @@ Result FakeBackend::liveviewFrame(const std::string& path) {
     if (!connected_) return Result::fail("not connected");
     std::ofstream f(path, std::ios::binary);
     if (!f) return Result::fail("cannot write " + path);
-    f.write(reinterpret_cast<const char*>(kTinyJpeg), sizeof(kTinyJpeg));
+    writeBmpFrame(f, liveviewCount_++);
     return Result::success();
 }
 
