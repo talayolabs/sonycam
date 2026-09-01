@@ -23,6 +23,7 @@ public:
 
     Result record(const std::string& op, std::string& outState) override;
     Result zoom(const std::string& op, int ms) override;
+    Result preset(const std::string& op, const std::string& path) override;
     Result focus(const std::string& op, int steps, std::string& outStatus) override;
     Result capture(const std::string& saveDir, std::string& outFile) override;
     Result liveviewFrame(const std::string& path) override;

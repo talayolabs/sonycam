@@ -35,6 +35,7 @@ sonycam focus position <V>        drive the lens to position V (requires mf);
 sonycam focus status              current focus indication (unlocked/focused/tracking)
 sonycam record start|stop|status  movie recording (camera must be in a movie mode)
 sonycam zoom in|out [MS] | stop   power zoom (fails cleanly on mechanical lenses)
+sonycam preset save|load <file>   save/restore the FULL camera configuration
 sonycam capture [--dir DIR] [--count N] [--interval SECS]
                                   fire the shutter; N shots SECS apart
 sonycam liveview <out.jpg>        save one live-view frame (fast, no shutter)
@@ -46,7 +47,10 @@ sonycam daemon stop               stop the background daemon
 ```
 
 Properties: `iso aperture shutter_speed exposure_comp exposure_program
-white_balance color_temp file_format image_quality focus_mode focus_area
+white_balance color_temp file_format image_quality movie_format movie_fps
+movie_quality picture_profile subject_recognition recognition_target
+eye_select af_transition_speed af_shift_sensitivity steadyshot_movie
+zoom_range touch_operation auto_power_off_temp focus_mode focus_area
 drive_mode priority_key`
 
 Add `--json` for machine-readable output. Exit codes: 0 ok, 1 camera error,
@@ -151,6 +155,16 @@ shown as hex and can be passed back to `set` verbatim.
 - Even with `file_format raw` or `raw+jpeg`, the file downloaded by
   `capture` is the JPEG rendition; RAW files stay on the memory card.
 - `file_format`/`image_quality` are read-only in movie modes.
+- **Presets**: `preset save/load` needs a still exposure mode (fails with
+  CrError 0x8402 in movie modes). After `preset load` the camera REBOOTS
+  (~30-60s off the USB bus) and, unless its USB Connection Mode menu is
+  pinned to "PC Remote", it asks on-screen for the connection mode — a
+  human must confirm it. Warn the user before loading.
+- Movie fps choices follow the camera's NTSC/PAL setting (NTSC: 24p/30p/
+  60p; PAL: 25p/50p/100p) — always trust `get movie_fps` choices.
+- `iso_auto_min`/`iso_auto_max` and `log_shooting` exist in the CLI but the
+  a7C II rejects them over remote (absent from `props`); set Auto ISO
+  limits on the camera body.
 - Stuck or weird daemon state: `sonycam daemon stop`, then retry (next
   command restarts it).
 - No hardware attached: use `sonycam --fake <cmd>` for a simulated camera

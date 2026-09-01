@@ -52,6 +52,7 @@ const char kUsage[] =
     "  focus status               current focus indication\n"
     "  record start|stop|status   movie recording (camera must be in a movie mode)\n"
     "  zoom in|out [MS] | stop    power zoom for MS milliseconds (PZ lenses only)\n"
+    "  preset save|load <file>    save/restore the full camera configuration\n"
     "  capture [--dir DIR] [--count N] [--interval SECS]\n"
     "                             trigger the shutter (N shots, SECS apart)\n"
     "  liveview <out.jpg> [--follow [--frames N]]\n"
@@ -191,6 +192,10 @@ int printResult(const std::string& cmd, const json& resp, bool jsonOut) {
         std::printf("focus: %s\n", result.value("status", "").c_str());
     } else if (cmd == "record") {
         std::printf("record: %s\n", result.value("state", "").c_str());
+    } else if (cmd == "preset") {
+        std::printf("preset %s: %s\n",
+                    result.value("op", "") == "save" ? "saved" : "loaded",
+                    result.value("file", "").c_str());
     } else if (cmd == "capture") {
         if (result.contains("files") && result["files"].size() > 1) {
             for (const auto& f : result["files"])
@@ -480,6 +485,12 @@ int main(int argc, char** argv) {
             }
         }
         req = {{"cmd", "zoom"}, {"op", args[1]}, {"ms", ms}};
+    } else if (cmd == "preset") {
+        if (args.size() != 3 || (args[1] != "save" && args[1] != "load")) {
+            std::fprintf(stderr, "usage: sonycam preset save|load <file>\n");
+            return 2;
+        }
+        req = {{"cmd", "preset"}, {"op", args[1]}, {"path", args[2]}};
     } else if (cmd == "capture") {
         req = {{"cmd", "capture"}};
         for (size_t i = 1; i < args.size(); ++i) {

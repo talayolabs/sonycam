@@ -13,6 +13,14 @@ M = an afternoon, L = larger.
 
 ## Done (this effort)
 
+- Video/AF property batch (choir-recipe coverage): movie_format/fps/quality,
+  picture_profile, subject_recognition, recognition_target, eye_select,
+  af_transition_speed, af_shift_sensitivity, steadyshot_movie, zoom_range,
+  touch_operation, auto_power_off_temp (iso_auto_min/max + log_shooting
+  wired but rejected remotely by the a7C II)
+- `preset save|load` full-config snapshots via Download/UploadSettingFile
+  (still-mode only; camera reboots after load)
+
 - #16 Absolute focus positioning: `focus position [V]` with
   position-convergence waiting and stall/limit detection
 - CI: bumped actions (checkout v7, upload-artifact v7, download-artifact v8)

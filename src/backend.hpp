@@ -55,6 +55,10 @@ public:
     // or "stop". Fails when the lens has no remote zoom.
     virtual Result zoom(const std::string& op, int ms) = 0;
 
+    // Full camera configuration as a file. op: "save" (camera -> `path`)
+    // or "load" (`path` -> camera).
+    virtual Result preset(const std::string& op, const std::string& path) = 0;
+
     // Focus control. op: "af" (half-press, wait for lock, release),
     // "near"/"far" (manual-focus nudges, `steps` times), "status" (read the
     // focus indication). `outStatus` reports the resulting focus state.

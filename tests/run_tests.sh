@@ -131,6 +131,25 @@ check "set file_format jpeg" "$SONYCAM" set file_format jpeg
 check "set image_quality extra_fine" "$SONYCAM" set image_quality extra_fine
 check "set color_temp 6500" "$SONYCAM" set color_temp 6500
 
+# --- presets save/restore camera state ---
+check "set iso 1600 before preset" "$SONYCAM" set iso 1600
+check "preset save" "$SONYCAM" preset save "$WORK/choir.preset"
+check "preset file exists" test -s "$WORK/choir.preset"
+check "set iso 100 after save" "$SONYCAM" set iso 100
+check "preset load" "$SONYCAM" preset load "$WORK/choir.preset"
+check_output "preset restored iso" \
+  '{"ok":true,"result":{"name":"iso","value":"1600"}}' \
+  python3 -c "
+import json, subprocess
+out = subprocess.run(['$SONYCAM', '--json', 'get', 'iso'],
+                     capture_output=True, text=True).stdout
+d = json.loads(out)
+print(json.dumps({'ok': d['ok'], 'result': {'name': d['result']['name'],
+                                            'value': d['result']['value']}},
+                 separators=(',', ':')))"
+check_fails "preset load missing file" "$SONYCAM" preset load "$WORK/nope.preset"
+check "restore iso auto" "$SONYCAM" set iso auto
+
 # --- burst capture + liveview streaming ---
 check "capture --count 3" "$SONYCAM" capture --dir "$WORK/burst" --count 3
 check "burst wrote 3 files" test "$(ls "$WORK/burst" | wc -l)" -eq 3

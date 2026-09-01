@@ -262,6 +262,194 @@ const EnumEntry kImageQuality[] = {
     {"extra_fine", SCRSDK::CrImageQuality_ExFine},
 };
 
+const EnumEntry kMovieFormat[] = {
+    {"avchd", SCRSDK::CrFileFormatMovie_AVCHD},
+    {"mp4", SCRSDK::CrFileFormatMovie_MP4},
+    {"xavc_s_4k", SCRSDK::CrFileFormatMovie_XAVC_S_4K},
+    {"xavc_s_hd", SCRSDK::CrFileFormatMovie_XAVC_S_HD},
+    {"xavc_hs_8k", SCRSDK::CrFileFormatMovie_XAVC_HS_8K},
+    {"xavc_hs_4k", SCRSDK::CrFileFormatMovie_XAVC_HS_4K},
+    {"xavc_s_l_4k", SCRSDK::CrFileFormatMovie_XAVC_S_L_4K},
+    {"xavc_s_l_hd", SCRSDK::CrFileFormatMovie_XAVC_S_L_HD},
+    {"xavc_s_i_4k", SCRSDK::CrFileFormatMovie_XAVC_S_I_4K},
+    {"xavc_s_i_hd", SCRSDK::CrFileFormatMovie_XAVC_S_I_HD},
+    {"xavc_i", SCRSDK::CrFileFormatMovie_XAVC_I},
+    {"xavc_l", SCRSDK::CrFileFormatMovie_XAVC_L},
+    {"xavc_hs_hd", SCRSDK::CrFileFormatMovie_XAVC_HS_HD},
+    {"xavc_s_i_dci_4k", SCRSDK::CrFileFormatMovie_XAVC_S_I_DCI_4K},
+    {"xavc_h_i_hq", SCRSDK::CrFileFormatMovie_XAVC_H_I_HQ},
+    {"xavc_h_i_sq", SCRSDK::CrFileFormatMovie_XAVC_H_I_SQ},
+    {"xavc_h_l", SCRSDK::CrFileFormatMovie_XAVC_H_L},
+    {"x_ocn_xt", SCRSDK::CrFileFormatMovie_X_OCN_XT},
+    {"x_ocn_st", SCRSDK::CrFileFormatMovie_X_OCN_ST},
+    {"x_ocn_lt", SCRSDK::CrFileFormatMovie_X_OCN_LT},
+    {"xavc_proxy", SCRSDK::CrFileFormatMovie_XAVC_Proxy},
+    {"xavc_hs_l_422", SCRSDK::CrFileFormatMovie_XAVC_HS_L_422},
+    {"xavc_hs_l_420", SCRSDK::CrFileFormatMovie_XAVC_HS_L_420},
+    {"xavc_s_l_422", SCRSDK::CrFileFormatMovie_XAVC_S_L_422},
+    {"xavc_s_l_420", SCRSDK::CrFileFormatMovie_XAVC_S_L_420},
+    {"xavc_s_i_422", SCRSDK::CrFileFormatMovie_XAVC_S_I_422},
+    {"mpeg_hd_422", SCRSDK::CrFileFormatMovie_MPEG_HD_422},
+};
+
+const EnumEntry kMovieFps[] = {
+    {"120p", SCRSDK::CrRecordingFrameRateSettingMovie_120p},
+    {"100p", SCRSDK::CrRecordingFrameRateSettingMovie_100p},
+    {"60p", SCRSDK::CrRecordingFrameRateSettingMovie_60p},
+    {"50p", SCRSDK::CrRecordingFrameRateSettingMovie_50p},
+    {"30p", SCRSDK::CrRecordingFrameRateSettingMovie_30p},
+    {"25p", SCRSDK::CrRecordingFrameRateSettingMovie_25p},
+    {"24p", SCRSDK::CrRecordingFrameRateSettingMovie_24p},
+    {"23.98p", SCRSDK::CrRecordingFrameRateSettingMovie_23_98p},
+    {"29.97p", SCRSDK::CrRecordingFrameRateSettingMovie_29_97p},
+    {"59.94p", SCRSDK::CrRecordingFrameRateSettingMovie_59_94p},
+    {"24.00p", SCRSDK::CrRecordingFrameRateSettingMovie_24_00p},
+    {"119.88p", SCRSDK::CrRecordingFrameRateSettingMovie_119_88p},
+};
+
+const EnumEntry kMovieQuality[] = {
+    {"60p_50m", SCRSDK::CrRecordingSettingMovie_60p_50M},
+    {"30p_50m", SCRSDK::CrRecordingSettingMovie_30p_50M},
+    {"24p_50m", SCRSDK::CrRecordingSettingMovie_24p_50M},
+    {"50p_50m", SCRSDK::CrRecordingSettingMovie_50p_50M},
+    {"25p_50m", SCRSDK::CrRecordingSettingMovie_25p_50M},
+    {"60i_24m", SCRSDK::CrRecordingSettingMovie_60i_24M},
+    {"50i_24m_fx", SCRSDK::CrRecordingSettingMovie_50i_24M_FX},
+    {"60i_17m_fh", SCRSDK::CrRecordingSettingMovie_60i_17M_FH},
+    {"50i_17m_fh", SCRSDK::CrRecordingSettingMovie_50i_17M_FH},
+    {"60p_28m_ps", SCRSDK::CrRecordingSettingMovie_60p_28M_PS},
+    {"50p_28m_ps", SCRSDK::CrRecordingSettingMovie_50p_28M_PS},
+    {"24p_24m_fx", SCRSDK::CrRecordingSettingMovie_24p_24M_FX},
+    {"25p_24m_fx", SCRSDK::CrRecordingSettingMovie_25p_24M_FX},
+    {"24p_17m_fh", SCRSDK::CrRecordingSettingMovie_24p_17M_FH},
+    {"25p_17m_fh", SCRSDK::CrRecordingSettingMovie_25p_17M_FH},
+    {"120p_50m_1280x720", SCRSDK::CrRecordingSettingMovie_120p_50M_1280x720},
+    {"100p_50m_1280x720", SCRSDK::CrRecordingSettingMovie_100p_50M_1280x720},
+    {"1920x1080_30p_16m", SCRSDK::CrRecordingSettingMovie_1920x1080_30p_16M},
+    {"1920x1080_25p_16m", SCRSDK::CrRecordingSettingMovie_1920x1080_25p_16M},
+    {"1280x720_30p_6m", SCRSDK::CrRecordingSettingMovie_1280x720_30p_6M},
+    {"1280x720_25p_6m", SCRSDK::CrRecordingSettingMovie_1280x720_25p_6M},
+    {"1920x1080_60p_28m", SCRSDK::CrRecordingSettingMovie_1920x1080_60p_28M},
+    {"1920x1080_50p_28m", SCRSDK::CrRecordingSettingMovie_1920x1080_50p_28M},
+    {"60p_25m_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_60p_25M_XAVC_S_HD},
+    {"50p_25m_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_50p_25M_XAVC_S_HD},
+    {"30p_16m_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_30p_16M_XAVC_S_HD},
+    {"25p_16m_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_25p_16M_XAVC_S_HD},
+    {"120p_100m_1920x1080_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_120p_100M_1920x1080_XAVC_S_HD},
+    {"100p_100m_1920x1080_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_100p_100M_1920x1080_XAVC_S_HD},
+    {"120p_60m_1920x1080_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_120p_60M_1920x1080_XAVC_S_HD},
+    {"100p_60m_1920x1080_xavc_s_hd", SCRSDK::CrRecordingSettingMovie_100p_60M_1920x1080_XAVC_S_HD},
+    {"30p_100m_xavc_s_4k", SCRSDK::CrRecordingSettingMovie_30p_100M_XAVC_S_4K},
+    {"25p_100m_xavc_s_4k", SCRSDK::CrRecordingSettingMovie_25p_100M_XAVC_S_4K},
+    {"24p_100m_xavc_s_4k", SCRSDK::CrRecordingSettingMovie_24p_100M_XAVC_S_4K},
+    {"30p_60m_xavc_s_4k", SCRSDK::CrRecordingSettingMovie_30p_60M_XAVC_S_4K},
+    {"25p_60m_xavc_s_4k", SCRSDK::CrRecordingSettingMovie_25p_60M_XAVC_S_4K},
+    {"24p_60m_xavc_s_4k", SCRSDK::CrRecordingSettingMovie_24p_60M_XAVC_S_4K},
+    {"600m_422_10bit", SCRSDK::CrRecordingSettingMovie_600M_422_10bit},
+    {"500m_422_10bit", SCRSDK::CrRecordingSettingMovie_500M_422_10bit},
+    {"400m_420_10bit", SCRSDK::CrRecordingSettingMovie_400M_420_10bit},
+    {"300m_422_10bit", SCRSDK::CrRecordingSettingMovie_300M_422_10bit},
+    {"280m_422_10bit", SCRSDK::CrRecordingSettingMovie_280M_422_10bit},
+    {"250m_422_10bit", SCRSDK::CrRecordingSettingMovie_250M_422_10bit},
+    {"240m_422_10bit", SCRSDK::CrRecordingSettingMovie_240M_422_10bit},
+    {"222m_422_10bit", SCRSDK::CrRecordingSettingMovie_222M_422_10bit},
+    {"200m_422_10bit", SCRSDK::CrRecordingSettingMovie_200M_422_10bit},
+    {"200m_420_10bit", SCRSDK::CrRecordingSettingMovie_200M_420_10bit},
+    {"200m_420_8bit", SCRSDK::CrRecordingSettingMovie_200M_420_8bit},
+    {"185m_422_10bit", SCRSDK::CrRecordingSettingMovie_185M_422_10bit},
+    {"150m_420_10bit", SCRSDK::CrRecordingSettingMovie_150M_420_10bit},
+    {"150m_420_8bit", SCRSDK::CrRecordingSettingMovie_150M_420_8bit},
+    {"140m_422_10bit", SCRSDK::CrRecordingSettingMovie_140M_422_10bit},
+    {"111m_422_10bit", SCRSDK::CrRecordingSettingMovie_111M_422_10bit},
+    {"100m_422_10bit", SCRSDK::CrRecordingSettingMovie_100M_422_10bit},
+    {"100m_420_10bit", SCRSDK::CrRecordingSettingMovie_100M_420_10bit},
+    {"100m_420_8bit", SCRSDK::CrRecordingSettingMovie_100M_420_8bit},
+    {"93m_422_10bit", SCRSDK::CrRecordingSettingMovie_93M_422_10bit},
+    {"89m_422_10bit", SCRSDK::CrRecordingSettingMovie_89M_422_10bit},
+    {"75m_420_10bit", SCRSDK::CrRecordingSettingMovie_75M_420_10bit},
+    {"60m_420_8bit", SCRSDK::CrRecordingSettingMovie_60M_420_8bit},
+    {"50m_422_10bit", SCRSDK::CrRecordingSettingMovie_50M_422_10bit},
+    {"50m_420_10bit", SCRSDK::CrRecordingSettingMovie_50M_420_10bit},
+    {"50m_420_8bit", SCRSDK::CrRecordingSettingMovie_50M_420_8bit},
+    {"45m_420_10bit", SCRSDK::CrRecordingSettingMovie_45M_420_10bit},
+    {"30m_420_10bit", SCRSDK::CrRecordingSettingMovie_30M_420_10bit},
+    {"25m_420_8bit", SCRSDK::CrRecordingSettingMovie_25M_420_8bit},
+    {"16m_420_8bit", SCRSDK::CrRecordingSettingMovie_16M_420_8bit},
+    {"520m_422_10bit", SCRSDK::CrRecordingSettingMovie_520M_422_10bit},
+    {"260m_422_10bit", SCRSDK::CrRecordingSettingMovie_260M_422_10bit},
+};
+
+const EnumEntry kPictureProfile[] = {
+    {"off", SCRSDK::CrPictureProfile_Off},
+    {"pp1", SCRSDK::CrPictureProfile_Number1},
+    {"pp2", SCRSDK::CrPictureProfile_Number2},
+    {"pp3", SCRSDK::CrPictureProfile_Number3},
+    {"pp4", SCRSDK::CrPictureProfile_Number4},
+    {"pp5", SCRSDK::CrPictureProfile_Number5},
+    {"pp6", SCRSDK::CrPictureProfile_Number6},
+    {"pp7", SCRSDK::CrPictureProfile_Number7},
+    {"pp8", SCRSDK::CrPictureProfile_Number8},
+    {"pp9", SCRSDK::CrPictureProfile_Number9},
+    {"pp10", SCRSDK::CrPictureProfile_Number10},
+    {"pp11", SCRSDK::CrPictureProfile_Number11},
+    {"pplut1", SCRSDK::CrPictureProfile_LUT_Number1},
+    {"pplut2", SCRSDK::CrPictureProfile_LUT_Number2},
+    {"pplut3", SCRSDK::CrPictureProfile_LUT_Number3},
+    {"pplut4", SCRSDK::CrPictureProfile_LUT_Number4},
+};
+
+const EnumEntry kLogShooting[] = {
+    {"off", SCRSDK::CrLogShootingMode_Off},
+    {"flexibleiso", SCRSDK::CrLogShootingMode_FlexibleISO},
+};
+
+const EnumEntry kSubjectRecognition[] = {
+    {"off", SCRSDK::CrSubjectRecognitionInAF_Off},
+    {"on", SCRSDK::CrSubjectRecognitionInAF_On},
+};
+
+const EnumEntry kRecognitionTarget[] = {
+    {"auto", SCRSDK::CrRecognitionTarget_Auto},
+    {"human", SCRSDK::CrRecognitionTarget_Person},
+    {"animal_bird", SCRSDK::CrRecognitionTarget_AnimalBird},
+    {"animal", SCRSDK::CrRecognitionTarget_Animal},
+    {"bird", SCRSDK::CrRecognitionTarget_Bird},
+    {"insect", SCRSDK::CrRecognitionTarget_Insect},
+    {"car_train", SCRSDK::CrRecognitionTarget_CarTrain},
+    {"plane", SCRSDK::CrRecognitionTarget_Plane},
+};
+
+const EnumEntry kEyeSelect[] = {
+    {"auto", SCRSDK::CrRightLeftEyeSelect_Auto},
+    {"right", SCRSDK::CrRightLeftEyeSelect_RightEye},
+    {"left", SCRSDK::CrRightLeftEyeSelect_LeftEye},
+};
+
+const EnumEntry kSteadyShotMovie[] = {
+    {"off", SCRSDK::CrImageStabilizationSteadyShotMovie_Off},
+    {"standard", SCRSDK::CrImageStabilizationSteadyShotMovie_Standard},
+    {"active", SCRSDK::CrImageStabilizationSteadyShotMovie_Active},
+    {"dynamic_active", SCRSDK::CrImageStabilizationSteadyShotMovie_DynamicActive},
+};
+
+const EnumEntry kZoomRange[] = {
+    {"optical_only", SCRSDK::CrZoomSetting_OpticalZoomOnly},
+    {"smart_only", SCRSDK::CrZoomSetting_SmartZoomOnly},
+    {"clear_image", SCRSDK::CrZoomSetting_On_ClearImageZoom},
+    {"digital", SCRSDK::CrZoomSetting_On_DigitalZoom},
+};
+
+const EnumEntry kTouchOperation[] = {
+    {"off", SCRSDK::CrTouchOperation_Off},
+    {"on", SCRSDK::CrTouchOperation_On},
+    {"playback_only", SCRSDK::CrTouchOperation_PlaybackOnly},
+};
+
+const EnumEntry kAutoPowerOffTemp[] = {
+    {"standard", SCRSDK::CrAutoPowerOffTemperature_Standard},
+    {"high", SCRSDK::CrAutoPowerOffTemperature_High},
+};
+
 std::string enumToString(const EnumEntry* table, size_t n, std::uint64_t v) {
     for (size_t i = 0; i < n; ++i)
         if (table[i].value == v) return table[i].name;
@@ -338,6 +526,15 @@ bool shutterFromString(const std::string& s, std::uint64_t& out) {
     }
 }
 
+std::string plainToString(std::uint64_t v) {
+    return std::to_string(v);
+}
+
+bool plainFromString(const std::string& s, std::uint64_t& out) {
+    try { out = std::stoull(s); } catch (...) { return false; }
+    return true;
+}
+
 std::string kelvinToString(std::uint64_t v) {
     return std::to_string(static_cast<std::uint16_t>(v)) + "K";
 }
@@ -402,6 +599,51 @@ const PropDef kProps[] = {
      nullptr, nullptr},
     {"image_quality", SCRSDK::CrDeviceProperty_StillImageQuality,
      SCRSDK::CrDataType_UInt16, kImageQuality, std::size(kImageQuality),
+     nullptr, nullptr},
+    {"iso_auto_min", SCRSDK::CrDeviceProperty_IsoAutoRangeLimitMin,
+     SCRSDK::CrDataType_UInt32, nullptr, 0, isoToString, isoFromString},
+    {"iso_auto_max", SCRSDK::CrDeviceProperty_IsoAutoRangeLimitMax,
+     SCRSDK::CrDataType_UInt32, nullptr, 0, isoToString, isoFromString},
+    {"movie_format", SCRSDK::CrDeviceProperty_Movie_File_Format,
+     SCRSDK::CrDataType_UInt8, kMovieFormat, std::size(kMovieFormat),
+     nullptr, nullptr},
+    {"movie_fps", SCRSDK::CrDeviceProperty_Movie_Recording_FrameRateSetting,
+     SCRSDK::CrDataType_UInt8, kMovieFps, std::size(kMovieFps),
+     nullptr, nullptr},
+    {"movie_quality", SCRSDK::CrDeviceProperty_Movie_Recording_Setting,
+     SCRSDK::CrDataType_UInt16, kMovieQuality, std::size(kMovieQuality),
+     nullptr, nullptr},
+    {"picture_profile", SCRSDK::CrDeviceProperty_PictureProfile,
+     SCRSDK::CrDataType_UInt8, kPictureProfile, std::size(kPictureProfile),
+     nullptr, nullptr},
+    {"log_shooting", SCRSDK::CrDeviceProperty_LogShootingMode,
+     SCRSDK::CrDataType_UInt16, kLogShooting, std::size(kLogShooting),
+     nullptr, nullptr},
+    {"subject_recognition", SCRSDK::CrDeviceProperty_SubjectRecognitionInAF,
+     SCRSDK::CrDataType_UInt8, kSubjectRecognition,
+     std::size(kSubjectRecognition), nullptr, nullptr},
+    {"recognition_target", SCRSDK::CrDeviceProperty_RecognitionTarget,
+     SCRSDK::CrDataType_UInt16, kRecognitionTarget,
+     std::size(kRecognitionTarget), nullptr, nullptr},
+    {"eye_select", SCRSDK::CrDeviceProperty_RightLeftEyeSelect,
+     SCRSDK::CrDataType_UInt8, kEyeSelect, std::size(kEyeSelect),
+     nullptr, nullptr},
+    {"af_transition_speed", SCRSDK::CrDeviceProperty_AFTransitionSpeed,
+     SCRSDK::CrDataType_UInt8, nullptr, 0, plainToString, plainFromString},
+    {"af_shift_sensitivity", SCRSDK::CrDeviceProperty_AFSubjShiftSens,
+     SCRSDK::CrDataType_UInt8, nullptr, 0, plainToString, plainFromString},
+    {"steadyshot_movie",
+     SCRSDK::CrDeviceProperty_Movie_ImageStabilizationSteadyShot,
+     SCRSDK::CrDataType_UInt8, kSteadyShotMovie, std::size(kSteadyShotMovie),
+     nullptr, nullptr},
+    {"zoom_range", SCRSDK::CrDeviceProperty_Zoom_Setting,
+     SCRSDK::CrDataType_UInt8, kZoomRange, std::size(kZoomRange),
+     nullptr, nullptr},
+    {"touch_operation", SCRSDK::CrDeviceProperty_TouchOperation,
+     SCRSDK::CrDataType_UInt8, kTouchOperation, std::size(kTouchOperation),
+     nullptr, nullptr},
+    {"auto_power_off_temp", SCRSDK::CrDeviceProperty_AutoPowerOffTemperature,
+     SCRSDK::CrDataType_UInt8, kAutoPowerOffTemp, std::size(kAutoPowerOffTemp),
      nullptr, nullptr},
     {"focus_mode", SCRSDK::CrDeviceProperty_FocusMode, SCRSDK::CrDataType_UInt16,
      kFocusMode, std::size(kFocusMode), nullptr, nullptr},
@@ -474,6 +716,20 @@ public:
             std::fprintf(stderr, "sonycamd: camera reconnected\n");
             return;
         }
+        if (warning == SCRSDK::CrWarning_CameraSettings_Read_Result_OK) {
+            std::lock_guard<std::mutex> lk(m_);
+            settingsResult_ = 1;
+            cv_.notify_all();
+            return;
+        }
+        if (warning == SCRSDK::CrWarning_CameraSettings_Read_Result_NG ||
+            warning == SCRSDK::CrWarning_CameraSettings_Read_Result_Invalid ||
+            warning == SCRSDK::CrWarning_CameraSettings_Save_Result_NG) {
+            std::lock_guard<std::mutex> lk(m_);
+            settingsResult_ = -1;
+            cv_.notify_all();
+            return;
+        }
         std::fprintf(stderr, "sonycamd: camera warning 0x%08x\n", warning);
     }
     void OnCompleteDownload(CrChar* filename, CrInt32u) override {
@@ -518,6 +774,17 @@ public:
         capturedEvent_ = false;
         downloadedFile_.clear();
     }
+    void armSettingsResult() {
+        std::lock_guard<std::mutex> lk(m_);
+        settingsResult_ = 0;
+    }
+    // 1 = ok, -1 = rejected, 0 = no confirmation within the timeout
+    int waitSettingsResult(int timeoutSec) {
+        std::unique_lock<std::mutex> lk(m_);
+        cv_.wait_for(lk, std::chrono::seconds(timeoutSec),
+                     [&] { return settingsResult_ != 0; });
+        return settingsResult_;
+    }
     // True once the camera reports the shutter actually fired (or the file
     // already arrived, for bodies that skip the captured event).
     bool waitCaptured(int timeoutMs) {
@@ -543,6 +810,7 @@ private:
     CrInt32u disconnectReason_ = 0;
     bool downloadDone_ = false;
     bool capturedEvent_ = false;
+    int settingsResult_ = 0;
     std::string downloadedFile_;
 };
 
@@ -948,6 +1216,60 @@ public:
             drive(SCRSDK::CrZoomOperation_Stop);
         }
         return Result::success();
+    }
+
+    Result preset(const std::string& op, const std::string& path) override {
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
+        std::error_code ec;
+        std::filesystem::path p = std::filesystem::absolute(path, ec);
+
+        if (op == "save") {
+            std::filesystem::create_directories(p.parent_path(), ec);
+            std::string dir = p.parent_path().string();
+            std::string name = p.filename().string();
+            std::filesystem::remove(p, ec);
+            callback_.armSettingsResult();
+            CrError err = SCRSDK::DownloadSettingFile(
+                handle_, SCRSDK::CrDownloadSettingFileType_Setup,
+                const_cast<CrChar*>(dir.c_str()),
+                const_cast<CrChar*>(name.c_str()));
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("preset save failed: " +
+                                    crErrorString(err));
+            for (int i = 0; i < 100; ++i) {  // wait for the file to arrive
+                if (std::filesystem::exists(p) &&
+                    std::filesystem::file_size(p, ec) > 0)
+                    return Result::success();
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            return Result::fail(
+                "camera did not deliver a settings file within 10s");
+        }
+
+        if (op == "load") {
+            if (!std::filesystem::exists(p))
+                return Result::fail("no such preset file: " + p.string());
+            callback_.armSettingsResult();
+            std::string full = p.string();
+            CrError err = SCRSDK::UploadSettingFile(
+                handle_, SCRSDK::CrUploadSettingFileType_Setup,
+                const_cast<CrChar*>(full.c_str()));
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("preset load failed: " +
+                                    crErrorString(err));
+            int r = callback_.waitSettingsResult(30);
+            if (r < 0)
+                return Result::fail(
+                    "camera rejected the settings file (wrong model or "
+                    "firmware version?)");
+            if (r == 0)
+                return Result::fail(
+                    "no confirmation from the camera within 30s");
+            return Result::success();
+        }
+
+        return Result::fail("unknown preset op: " + op);
     }
 
     Result focus(const std::string& op, int steps,

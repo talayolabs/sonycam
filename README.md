@@ -35,7 +35,14 @@ sonycam daemon stop
 
 Supported properties: `iso`, `aperture`, `shutter_speed`, `exposure_comp`,
 `exposure_program`, `white_balance`, `color_temp`, `file_format`,
-`image_quality`, `focus_mode`, `focus_area`, `drive_mode`, `priority_key`.
+`image_quality`, `movie_format`, `movie_fps`, `movie_quality`,
+`picture_profile`, `subject_recognition`, `recognition_target`,
+`eye_select`, `af_transition_speed`, `af_shift_sensitivity`,
+`steadyshot_movie`, `zoom_range`, `touch_operation`, `auto_power_off_temp`,
+`focus_mode`, `focus_area`, `drive_mode`, `priority_key`.
+
+`sonycam preset save|load <file>` snapshots/restores the entire camera
+configuration (requires a still mode; the camera reboots after a load).
 
 Install with `cmake --install build` (real-SDK builds should keep running
 from `build/`, where the Sony dylibs are staged).

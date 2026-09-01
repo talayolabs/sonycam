@@ -193,6 +193,29 @@ Result FakeBackend::zoom(const std::string& op, int) {
     return Result::success();  // the fake lens is a power zoom
 }
 
+Result FakeBackend::preset(const std::string& op, const std::string& path) {
+    if (!connected_) return Result::fail("not connected");
+    if (op == "save") {
+        std::ofstream f(path);
+        if (!f) return Result::fail("cannot write " + path);
+        for (const auto& [name, p] : props_) f << name << "=" << p.value << "\n";
+        return Result::success();
+    }
+    if (op == "load") {
+        std::ifstream f(path);
+        if (!f) return Result::fail("no such preset file: " + path);
+        std::string line;
+        while (std::getline(f, line)) {
+            auto eq = line.find('=');
+            if (eq == std::string::npos) continue;
+            auto it = props_.find(line.substr(0, eq));
+            if (it != props_.end()) it->second.value = line.substr(eq + 1);
+        }
+        return Result::success();
+    }
+    return Result::fail("unknown preset op: " + op);
+}
+
 Result FakeBackend::record(const std::string& op, std::string& outState) {
     if (!connected_) return Result::fail("not connected");
     if (op == "start") recording_ = true;
