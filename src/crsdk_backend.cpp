@@ -14,6 +14,7 @@ std::unique_ptr<CameraBackend> makeCrsdkBackend(std::string& error) {
 
 #else  // SONYCAM_WITH_CRSDK
 
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -246,6 +247,21 @@ const EnumEntry kPriorityKey[] = {
     {"pc_remote", SCRSDK::CrPriorityKey_PCRemote},
 };
 
+const EnumEntry kFileFormat[] = {
+    {"jpeg", SCRSDK::CrFileType_Jpeg},
+    {"raw", SCRSDK::CrFileType_Raw},
+    {"raw+jpeg", SCRSDK::CrFileType_RawJpeg},
+    {"raw+heif", SCRSDK::CrFileType_RawHeif},
+    {"heif", SCRSDK::CrFileType_Heif},
+};
+
+const EnumEntry kImageQuality[] = {
+    {"light", SCRSDK::CrImageQuality_Light},
+    {"standard", SCRSDK::CrImageQuality_Standard},
+    {"fine", SCRSDK::CrImageQuality_Fine},
+    {"extra_fine", SCRSDK::CrImageQuality_ExFine},
+};
+
 std::string enumToString(const EnumEntry* table, size_t n, std::uint64_t v) {
     for (size_t i = 0; i < n; ++i)
         if (table[i].value == v) return table[i].name;
@@ -322,6 +338,17 @@ bool shutterFromString(const std::string& s, std::uint64_t& out) {
     }
 }
 
+std::string kelvinToString(std::uint64_t v) {
+    return std::to_string(static_cast<std::uint16_t>(v)) + "K";
+}
+
+bool kelvinFromString(const std::string& in, std::uint64_t& out) {
+    std::string s = in;
+    if (!s.empty() && (s.back() == 'K' || s.back() == 'k')) s.pop_back();
+    try { out = std::stoul(s); } catch (...) { return false; }
+    return true;
+}
+
 std::string evToString(std::uint64_t v) {
     // stored as value * 1000, signed 16-bit
     std::int16_t milli = static_cast<std::int16_t>(v);
@@ -367,6 +394,14 @@ const PropDef kProps[] = {
      nullptr, nullptr},
     {"white_balance", SCRSDK::CrDeviceProperty_WhiteBalance,
      SCRSDK::CrDataType_UInt16, kWhiteBalance, std::size(kWhiteBalance),
+     nullptr, nullptr},
+    {"color_temp", SCRSDK::CrDeviceProperty_Colortemp,
+     SCRSDK::CrDataType_UInt16, nullptr, 0, kelvinToString, kelvinFromString},
+    {"file_format", SCRSDK::CrDeviceProperty_FileType,
+     SCRSDK::CrDataType_UInt16, kFileFormat, std::size(kFileFormat),
+     nullptr, nullptr},
+    {"image_quality", SCRSDK::CrDeviceProperty_StillImageQuality,
+     SCRSDK::CrDataType_UInt16, kImageQuality, std::size(kImageQuality),
      nullptr, nullptr},
     {"focus_mode", SCRSDK::CrDeviceProperty_FocusMode, SCRSDK::CrDataType_UInt16,
      kFocusMode, std::size(kFocusMode), nullptr, nullptr},
@@ -601,6 +636,8 @@ public:
             found->GetConnectionTypeName(), found->GetAdaptorName(),
             found->GetPairingNecessity(), found->GetSSHsupport());
         model_ = reinterpret_cast<const char*>(found->GetModel());
+        transport_ = reinterpret_cast<const char*>(found->GetConnectionTypeName());
+        for (auto& c : transport_) c = static_cast<char>(std::tolower(c));
         enumInfo->Release();
         if (!camera_) return Result::fail("CreateCameraObjectInfo failed");
 
@@ -684,7 +721,7 @@ public:
         ci.connected = handle_ != 0 && callback_.isConnected() &&
                        !callback_.isReconnecting();
         ci.model = model_;
-        ci.transport = "usb/net";
+        ci.transport = transport_.empty() ? "-" : transport_;
         return ci;
     }
 
@@ -862,6 +899,57 @@ public:
                             "); is the camera in a movie mode with a card?");
     }
 
+    Result zoom(const std::string& op, int ms) override {
+        Result conn = ensureConnected();
+        if (!conn.ok) return conn;
+        std::int8_t dir;
+        if (op == "in") dir = SCRSDK::CrZoomOperation_Tele;
+        else if (op == "out") dir = SCRSDK::CrZoomOperation_Wide;
+        else if (op == "stop") dir = SCRSDK::CrZoomOperation_Stop;
+        else return Result::fail("unknown zoom op: " + op);
+
+        // Zoom_Operation reports writable even for mechanical lenses; the
+        // authoritative signal is Zoom_Operation_Status.
+        std::uint64_t zoomEnabled = 0;
+        if (readNumericProp(SCRSDK::CrDeviceProperty_Zoom_Operation_Status,
+                            zoomEnabled) &&
+            zoomEnabled == SCRSDK::CrZoomOperationEnableStatus_Disable)
+            return Result::fail(
+                "lens does not support remote zoom (see 'sonycam info')");
+
+        CrDeviceProperty* props = nullptr;
+        CrInt32 num = 0;
+        CrInt32u code = SCRSDK::CrDeviceProperty_Zoom_Operation;
+        CrError err = SCRSDK::GetSelectDeviceProperties(
+            handle_, 1, &code, &props, &num);
+        if (err != SCRSDK::CrError_None || num == 0 || !props) {
+            if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
+            return Result::fail("zoom not available: " + crErrorString(err));
+        }
+        SCRSDK::CrDataType valueType = props[0].GetValueType();
+        bool writable = props[0].IsSetEnableCurrentValue();
+        SCRSDK::ReleaseDeviceProperties(handle_, props);
+        if (!writable)
+            return Result::fail(
+                "lens does not support remote zoom (see 'sonycam info')");
+
+        auto drive = [&](std::int8_t d) {
+            CrDeviceProperty p;
+            p.SetCode(code);
+            p.SetValueType(valueType);
+            p.SetCurrentValue(static_cast<std::uint8_t>(d));
+            return SCRSDK::SetDeviceProperty(handle_, &p);
+        };
+        err = drive(dir);
+        if (err != SCRSDK::CrError_None)
+            return Result::fail("zoom failed: " + crErrorString(err));
+        if (dir != SCRSDK::CrZoomOperation_Stop) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+            drive(SCRSDK::CrZoomOperation_Stop);
+        }
+        return Result::success();
+    }
+
     Result focus(const std::string& op, int steps,
                  std::string& outStatus) override {
         Result conn = ensureConnected();
@@ -1016,10 +1104,16 @@ public:
         err = SCRSDK::GetLiveViewImage(handle_, &block);
         if (err != SCRSDK::CrError_None)
             return Result::fail("GetLiveViewImage failed: " + crErrorString(err));
-        std::ofstream f(path, std::ios::binary);
-        if (!f) return Result::fail("cannot write " + path);
+        // Write atomically so streaming readers never see a partial frame.
+        const std::string tmp = path + ".tmp";
+        std::ofstream f(tmp, std::ios::binary);
+        if (!f) return Result::fail("cannot write " + tmp);
         f.write(reinterpret_cast<const char*>(block.GetImageData()),
                 block.GetImageSize());
+        f.close();
+        std::error_code ec;
+        std::filesystem::rename(tmp, path, ec);
+        if (ec) return Result::fail("cannot rename to " + path + ": " + ec.message());
         return Result::success();
     }
 
@@ -1135,11 +1229,21 @@ private:
             case SCRSDK::CrDataType_UInt64: stride = 8; break;
             default: return out;
         }
+        std::vector<std::uint64_t> raw;
         for (size_t off = 0; off + stride <= byteSize; off += stride) {
             std::uint64_t v = 0;
             std::memcpy(&v, values + off, stride);
-            out.push_back(valueToString(def, v));
+            raw.push_back(v);
         }
+        if ((prop.GetValueType() & SCRSDK::CrDataType_RangeBit) &&
+            raw.size() == 3) {
+            // ranges arrive as [min, max, step]
+            out.push_back(valueToString(def, raw[0]) + ".." +
+                          valueToString(def, raw[1]) + " step " +
+                          valueToString(def, raw[2]));
+            return out;
+        }
+        for (std::uint64_t v : raw) out.push_back(valueToString(def, v));
         return out;
     }
 
@@ -1150,6 +1254,7 @@ private:
     SCRSDK::CrDeviceHandle handle_ = 0;
     Callback callback_;
     std::string model_;
+    std::string transport_;
 };
 
 }  // namespace

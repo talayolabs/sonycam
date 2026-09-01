@@ -26,6 +26,10 @@
 #include "protocol.hpp"
 #include "ui_html.hpp"
 
+#ifndef SONYCAM_VERSION
+#define SONYCAM_VERSION "dev"
+#endif
+
 using json = nlohmann::json;
 using namespace sonycam;
 
@@ -46,23 +50,30 @@ const char kUsage[] =
     "  focus near|far [N]         manual-focus nudge N steps (needs focus_mode mf)\n"
     "  focus status               current focus indication\n"
     "  record start|stop|status   movie recording (camera must be in a movie mode)\n"
-    "  capture [--dir DIR]        trigger the shutter\n"
-    "  liveview <out.jpg>         save one live-view frame\n"
+    "  zoom in|out [MS] | stop    power zoom for MS milliseconds (PZ lenses only)\n"
+    "  capture [--dir DIR] [--count N] [--interval SECS]\n"
+    "                             trigger the shutter (N shots, SECS apart)\n"
+    "  liveview <out.jpg> [--follow [--frames N]]\n"
+    "                             save a live-view frame; --follow streams frames\n"
+    "                             (atomic overwrite) until ctrl-c or N frames\n"
     "  connect | disconnect       manage the camera connection\n"
     "  daemon stop                stop the background daemon\n"
     "  --ui [[HOST:]PORT]         serve a web UI (default 127.0.0.1:3000)\n"
     "\n"
     "properties: iso aperture shutter_speed exposure_comp exposure_program\n"
-    "            white_balance focus_mode focus_area drive_mode priority_key\n"
+    "            white_balance color_temp file_format image_quality\n"
+    "            focus_mode focus_area drive_mode priority_key\n"
     "\n"
     "examples:\n"
     "  sonycam set aperture 2.8      sonycam set shutter_speed 1/250\n"
     "  sonycam set iso auto          sonycam --json props\n"
+    "  sonycam capture --count 5 --interval 2\n"
     "\n"
     "flags:\n"
     "  --json     machine-readable output\n"
     "  --fake     use the built-in simulated camera (no hardware needed)\n"
     "  --ui       start a local web UI for live viewing/tweaking properties\n"
+    "  --version  print the sonycam version\n"
     "\n"
     "The first command auto-starts the sonycamd daemon, which keeps the\n"
     "camera connection open between invocations.\n";
@@ -180,8 +191,19 @@ int printResult(const std::string& cmd, const json& resp, bool jsonOut) {
     } else if (cmd == "record") {
         std::printf("record: %s\n", result.value("state", "").c_str());
     } else if (cmd == "capture") {
-        std::string f = result.value("file", "");
-        std::printf("captured%s%s\n", f.empty() ? "" : ": ", f.c_str());
+        if (result.contains("files") && result["files"].size() > 1) {
+            for (const auto& f : result["files"])
+                std::printf("captured: %s\n", f.get<std::string>().c_str());
+        } else {
+            std::string f = result.value("file", "");
+            std::printf("captured%s%s\n", f.empty() ? "" : ": ", f.c_str());
+        }
+        if (result.contains("error_after")) {
+            std::fprintf(stderr, "error after %zu shot(s): %s\n",
+                         result["files"].size(),
+                         result["error_after"].get<std::string>().c_str());
+            return 1;
+        }
     } else if (cmd == "liveview") {
         std::printf("saved %s\n", result.value("file", "").c_str());
     } else {
@@ -371,7 +393,8 @@ int runUiServer(const std::string& host, int port, const std::string& socketPath
 }  // namespace
 
 int main(int argc, char** argv) {
-    bool jsonOut = false, fake = false, ui = false;
+    bool jsonOut = false, fake = false, ui = false, follow = false;
+    int followFrames = -1;
     std::string uiHost = "127.0.0.1";
     int uiPort = 3000;
     std::string socketPath = defaultSocketPath();
@@ -386,6 +409,7 @@ int main(int argc, char** argv) {
             if (i + 1 < argc && parseBind(argv[i + 1], uiHost, uiPort)) ++i;
         }
         else if (a == "-h" || a == "--help") { std::fputs(kUsage, stdout); return 0; }
+        else if (a == "--version") { std::printf("sonycam %s\n", SONYCAM_VERSION); return 0; }
         else args.push_back(a);
     }
     if (std::getenv("SONYCAM_FAKE")) fake = true;
@@ -433,13 +457,74 @@ int main(int argc, char** argv) {
             return 2;
         }
         req = {{"cmd", "record"}, {"op", args[1]}};
+    } else if (cmd == "zoom") {
+        if (args.size() < 2 || args.size() > 3 ||
+            (args[1] != "in" && args[1] != "out" && args[1] != "stop")) {
+            std::fprintf(stderr, "usage: sonycam zoom in|out [MS] | stop\n");
+            return 2;
+        }
+        int ms = 300;
+        if (args.size() == 3) {
+            try { ms = std::stoi(args[2]); } catch (...) { ms = 0; }
+            if (ms < 1 || ms > 10000) {
+                std::fprintf(stderr, "MS must be 1-10000\n");
+                return 2;
+            }
+        }
+        req = {{"cmd", "zoom"}, {"op", args[1]}, {"ms", ms}};
     } else if (cmd == "capture") {
         req = {{"cmd", "capture"}};
-        for (size_t i = 1; i + 1 < args.size(); ++i)
-            if (args[i] == "--dir") req["dir"] = args[i + 1];
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--dir" && i + 1 < args.size()) req["dir"] = args[++i];
+            else if (args[i] == "--count" && i + 1 < args.size()) {
+                int n = 0;
+                try { n = std::stoi(args[++i]); } catch (...) {}
+                if (n < 1 || n > 1000) {
+                    std::fprintf(stderr, "--count must be 1-1000\n");
+                    return 2;
+                }
+                req["count"] = n;
+            } else if (args[i] == "--interval" && i + 1 < args.size()) {
+                double s = -1;
+                try { s = std::stod(args[++i]); } catch (...) {}
+                if (s < 0 || s > 3600) {
+                    std::fprintf(stderr, "--interval must be 0-3600 seconds\n");
+                    return 2;
+                }
+                req["interval_ms"] = static_cast<int>(s * 1000);
+            } else {
+                std::fprintf(stderr,
+                             "usage: sonycam capture [--dir DIR] [--count N] "
+                             "[--interval SECS]\n");
+                return 2;
+            }
+        }
     } else if (cmd == "liveview") {
-        if (args.size() != 2) { std::fprintf(stderr, "usage: sonycam liveview <out.jpg>\n"); return 2; }
-        req = {{"cmd", "liveview"}, {"path", args[1]}};
+        for (size_t i = 1; i < args.size(); ++i) {
+            if (args[i] == "--follow") follow = true;
+            else if (args[i] == "--frames" && i + 1 < args.size()) {
+                try { followFrames = std::stoi(args[++i]); } catch (...) { followFrames = 0; }
+                if (followFrames < 1) {
+                    std::fprintf(stderr, "--frames must be >= 1\n");
+                    return 2;
+                }
+                follow = true;
+            } else if (args[i][0] != '-' && !req.contains("path")) {
+                req["path"] = args[i];
+            } else {
+                std::fprintf(stderr,
+                             "usage: sonycam liveview <out.jpg> [--follow "
+                             "[--frames N]]\n");
+                return 2;
+            }
+        }
+        if (!req.contains("path")) {
+            std::fprintf(stderr,
+                         "usage: sonycam liveview <out.jpg> [--follow "
+                         "[--frames N]]\n");
+            return 2;
+        }
+        req["cmd"] = "liveview";
     } else if (cmd == "daemon") {
         if (args.size() == 2 && args[1] == "stop") {
             req = {{"cmd", "shutdown"}};
@@ -490,6 +575,41 @@ int main(int argc, char** argv) {
                 return 1;
             }
         }
+    }
+
+    if (follow) {
+        const std::string path = req.value("path", "");
+        std::fprintf(stderr, "streaming live view to %s (%s)\n", path.c_str(),
+                     followFrames > 0
+                         ? (std::to_string(followFrames) + " frames").c_str()
+                         : "ctrl-c to stop");
+        int frames = 0;
+        json fresp;
+        while (followFrames < 0 || frames < followFrames) {
+            if (!sendRequest(fd, req, fresp)) {
+                std::fprintf(stderr, "error: lost connection to daemon\n");
+                ::close(fd);
+                return 3;
+            }
+            if (!fresp.value("ok", false)) {
+                std::fprintf(stderr, "error: %s\n",
+                             fresp.value("error", "unknown").c_str());
+                ::close(fd);
+                return 1;
+            }
+            ++frames;
+        }
+        ::close(fd);
+        if (jsonOut)
+            std::printf("%s\n", json{{"ok", true},
+                                     {"result", {{"file", path},
+                                                 {"frames", frames}}}}
+                                    .dump()
+                                    .c_str());
+        else
+            std::printf("saved %d frame%s to %s\n", frames,
+                        frames == 1 ? "" : "s", path.c_str());
+        return 0;
     }
 
     json resp;

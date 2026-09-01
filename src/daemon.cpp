@@ -9,12 +9,15 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cerrno>
+#include <chrono>
 #include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <thread>
 
 #include <nlohmann/json.hpp>
 
@@ -88,14 +91,31 @@ json handle(CameraBackend& cam, const json& req, bool& shutdown) {
         std::string state;
         r = cam.record(req.value("op", ""), state);
         if (r.ok) resp["result"] = {{"state", state}};
+    } else if (cmd == "zoom") {
+        r = cam.zoom(req.value("op", ""), req.value("ms", 300));
     } else if (cmd == "focus") {
         std::string status;
         r = cam.focus(req.value("op", ""), req.value("steps", 1), status);
         if (r.ok) resp["result"] = {{"status", status}};
     } else if (cmd == "capture") {
-        std::string outFile;
-        r = cam.capture(req.value("dir", ""), outFile);
-        if (r.ok) resp["result"] = {{"file", outFile}};
+        const int count = std::max(1, req.value("count", 1));
+        const int intervalMs = std::max(0, req.value("interval_ms", 0));
+        json files = json::array();
+        for (int i = 0; i < count; ++i) {
+            if (i > 0 && intervalMs > 0)
+                std::this_thread::sleep_for(
+                    std::chrono::milliseconds(intervalMs));
+            std::string outFile;
+            r = cam.capture(req.value("dir", ""), outFile);
+            if (!r.ok) break;
+            files.push_back(outFile);
+        }
+        if (r.ok || !files.empty()) {
+            resp["result"] = {{"files", files}};
+            if (!files.empty()) resp["result"]["file"] = files.back();
+            if (!r.ok) resp["result"]["error_after"] = r.error;
+            r = Result::success();
+        }
     } else if (cmd == "liveview") {
         const std::string path = req.value("path", "");
         if (path.empty()) return {{"ok", false}, {"error", "missing 'path'"}};

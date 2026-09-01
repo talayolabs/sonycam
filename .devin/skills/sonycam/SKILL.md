@@ -31,14 +31,20 @@ sonycam focus af                  autofocus (half-press), waits for lock, report
 sonycam focus near|far [N]        manual-focus nudge N steps (requires focus_mode mf)
 sonycam focus status              current focus indication (unlocked/focused/tracking)
 sonycam record start|stop|status  movie recording (camera must be in a movie mode)
-sonycam capture [--dir DIR]       fire the shutter, downloads the image, prints its path
+sonycam zoom in|out [MS] | stop   power zoom (fails cleanly on mechanical lenses)
+sonycam capture [--dir DIR] [--count N] [--interval SECS]
+                                  fire the shutter; N shots SECS apart
 sonycam liveview <out.jpg>        save one live-view frame (fast, no shutter)
+sonycam liveview <out.jpg> --follow [--frames N]
+                                  stream frames (atomic overwrite) until ctrl-c/N
+sonycam --version                 print the CLI version
 sonycam connect | disconnect      manage the camera connection
 sonycam daemon stop               stop the background daemon
 ```
 
 Properties: `iso aperture shutter_speed exposure_comp exposure_program
-white_balance focus_mode focus_area drive_mode priority_key`
+white_balance color_temp file_format image_quality focus_mode focus_area
+drive_mode priority_key`
 
 Add `--json` for machine-readable output. Exit codes: 0 ok, 1 camera error,
 2 usage, 3 daemon unreachable.
@@ -103,6 +109,9 @@ so hardware limitations are understood by everyone.
 | exposure_comp | `+0.7`, `-1.0` |
 | exposure_program | `manual`, `program_auto`, `aperture_priority`, `shutter_priority`, `auto` |
 | white_balance | `auto`, `daylight`, `cloudy`, `tungsten`, `color_temp` |
+| color_temp | `5500K` or `5500` (kelvin; only applies when white_balance is `color_temp`) |
+| file_format | `jpeg`, `raw`, `raw+jpeg`, `heif` |
+| image_quality | `light`, `standard`, `fine`, `extra_fine` |
 | focus_mode | `af_s`, `af_c`, `af_a`, `dmf`, `mf` |
 | focus_area | `wide`, `zone`, `center`, `spot_m`, `expand_spot` |
 
@@ -131,6 +140,11 @@ shown as hex and can be passed back to `set` verbatim.
 - `focus af` fails with "did not lock": add light, aim at higher contrast,
   try `set focus_area center`, or fall back to mf + `focus near/far` while
   checking liveview frames.
+- Ranges print as `min..max step X` in choices (e.g. color_temp
+  `2500K..9900K step 100K`).
+- Even with `file_format raw` or `raw+jpeg`, the file downloaded by
+  `capture` is the JPEG rendition; RAW files stay on the memory card.
+- `file_format`/`image_quality` are read-only in movie modes.
 - Stuck or weird daemon state: `sonycam daemon stop`, then retry (next
   command restarts it).
 - No hardware attached: use `sonycam --fake <cmd>` for a simulated camera

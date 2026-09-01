@@ -22,16 +22,22 @@ sonycam set white_balance daylight
 sonycam focus af                  # autofocus, waits for lock
 sonycam focus near 5              # manual-focus nudge (focus_mode mf)
 sonycam record start              # movie recording (movie mode)
+sonycam zoom in 500               # power zoom (PZ lenses)
 sonycam capture --dir ~/photos    # trigger the shutter
+sonycam capture --count 5 --interval 2   # burst / timelapse
 sonycam liveview frame.jpg        # save one live-view frame
+sonycam liveview f.jpg --follow   # stream frames until ctrl-c
 sonycam --json props              # machine-readable output for agents
 sonycam --ui                      # web UI at http://127.0.0.1:3000
 sonycam daemon stop
 ```
 
 Supported properties: `iso`, `aperture`, `shutter_speed`, `exposure_comp`,
-`exposure_program`, `white_balance`, `focus_mode`, `focus_area`, `drive_mode`,
-`priority_key`.
+`exposure_program`, `white_balance`, `color_temp`, `file_format`,
+`image_quality`, `focus_mode`, `focus_area`, `drive_mode`, `priority_key`.
+
+Install with `cmake --install build` (real-SDK builds should keep running
+from `build/`, where the Sony dylibs are staged).
 
 ## Web UI
 
@@ -222,8 +228,11 @@ Reference material (not dependencies): [crsdk.app property docs](https://crsdk.a
   FE 24-70mm F2.8 GM II over USB on Apple Silicon macOS. Full round trip
   works: connect, props, get/set (incl. aperture with the lens ring on "A"),
   capture with image download, live view, gear identification.
-- Not exposed yet (SDK supports them): power-zoom control, file format
-  selection, absolute focus positioning.
+- Wi-Fi: `status` reports the real transport, but only USB has been
+  hardware-tested.
+- Capture downloads the JPEG rendition; RAW files stay on the memory card.
+- Not exposed yet (SDK supports them): absolute focus positioning, FTP
+  transfer, custom white-balance capture.
 - Value codecs for shutter/ISO/EV follow the SDK header conventions; exact
   accepted values depend on the camera mode (e.g. aperture is not writable
   in S mode, most exposure props are locked in full Auto).

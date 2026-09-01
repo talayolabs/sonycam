@@ -54,8 +54,10 @@ check "status" "$SONYCAM" status
 check "props lists properties" "$SONYCAM" props
 check "connect is idempotent" "$SONYCAM" connect
 check_output "info identifies gear" \
-  "lens               FAKE FE 28-70mm F3.5-5.6 OSS" \
+  "lens               FAKE FE PZ 28-135mm F4 G OSS" \
   sh -c "'$SONYCAM' info | grep '^lens '"
+check_output "version flag" "1" \
+  sh -c "'$SONYCAM' --version | grep -c '^sonycam [0-9]'"
 
 # --- get/set round trips ---
 check "get iso" "$SONYCAM" get iso
@@ -110,6 +112,25 @@ check_output "record status idle" "record: not_recording" "$SONYCAM" record stat
 check_output "record start" "record: recording" "$SONYCAM" record start
 check_output "record stop" "record: not_recording" "$SONYCAM" record stop
 check_fails "record rejects bad op" "$SONYCAM" record pause
+
+# --- power zoom ---
+check "zoom in" "$SONYCAM" zoom in 50
+check "zoom out" "$SONYCAM" zoom out 50
+check "zoom stop" "$SONYCAM" zoom stop
+check_fails "zoom rejects bad op" "$SONYCAM" zoom sideways
+
+# --- new properties ---
+check "set file_format raw+jpeg" "$SONYCAM" set file_format raw+jpeg
+check "set file_format jpeg" "$SONYCAM" set file_format jpeg
+check "set image_quality extra_fine" "$SONYCAM" set image_quality extra_fine
+check "set color_temp 6500" "$SONYCAM" set color_temp 6500
+
+# --- burst capture + liveview streaming ---
+check "capture --count 3" "$SONYCAM" capture --dir "$WORK/burst" --count 3
+check "burst wrote 3 files" test "$(ls "$WORK/burst" | wc -l)" -eq 3
+check "liveview --frames 3" "$SONYCAM" liveview "$WORK/stream.jpg" --frames 3
+check "stream frame exists" test -s "$WORK/stream.jpg"
+check "no leftover tmp frame" test ! -e "$WORK/stream.jpg.tmp"
 
 # --- priority key gate ---
 check "set priority_key camera" "$SONYCAM" set priority_key camera

@@ -4,24 +4,20 @@ Priorities: P0 = fixes a real failure seen on hardware · P1 = robustness /
 agent ergonomics · P2 = new capability · P3 = infra. Effort: S < 1h-ish,
 M = an afternoon, L = larger.
 
-## P2 — new capabilities
+## Open
 
 | # | Item | Effort | Why |
 |---|------|--------|-----|
-| 7 | **File format control** — `set file_format raw\|jpeg\|raw+jpeg`, JPEG quality | S | Capture downloads whatever the camera is set to; agents can't choose. |
-| 8 | **Custom WB color temperature** — set kelvin value when `white_balance color_temp` | S | Mode selectable today, value isn't. |
-| 9 | **Liveview streaming** — `liveview --follow` writing frames continuously (agent vision loops) | M | Single-frame works; loops currently shell out repeatedly. |
-| 10 | **Power-zoom control** | S | No-op for the current GM II lens (`remote_zoom no`); useful for PZ lenses. |
-| 11 | **Real transport reporting + Wi-Fi validation** — `status` hardcodes `usb/net`; test Wi-Fi connect path | M | Only USB validated. |
-| 12 | **Interval / burst capture** — `capture --count N --interval S` | S | Timelapse-style agent workflows. |
-
-## P3 — infra & housekeeping
-
-| # | Item | Effort | Why |
-|---|------|--------|-----|
-| 15 | **`cmake --install` target / packaging** — put `sonycam`+`sonycamd` on PATH properly | S | Currently run from `build/`. |
+| 11b | **Wi-Fi validation** — transport reporting is real now, but only USB is hardware-tested | M | Needs camera Wi-Fi pairing. |
+| 16 | **Absolute focus positioning** (`FocusPositionSetting`) | M | near/far nudges work; absolute would be better for agents. |
 
 ## Done (this effort)
+
+- v0.2.0 batch: #7 file_format/image_quality props, #8 color_temp kelvin
+  (+ range display `min..max step X`), #9 `liveview --follow/--frames`
+  with atomic frame writes, #10 `zoom in/out/stop` (gated on
+  Zoom_Operation_Status), #11 real transport reporting, #12
+  `capture --count/--interval`, #15 `cmake --install` + `--version`
 
 - #1 Remote focus control: `focus af` (S1 half-press + FocusIndication
   wait), `focus near/far [N]` MF nudges, `focus status`

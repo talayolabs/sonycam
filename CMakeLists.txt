@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(sonycam CXX)
+project(sonycam VERSION 0.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -86,6 +86,13 @@ endif()
 
 add_executable(sonycam src/cli.cpp)
 target_link_libraries(sonycam PRIVATE sonycam_core Threads::Threads)
+target_compile_definitions(sonycam PRIVATE
+  SONYCAM_VERSION="${PROJECT_VERSION}")
+
+# `cmake --install build` puts both binaries on PATH (default /usr/local/bin).
+# Real-SDK builds should keep running from the build directory, where the
+# Sony dylibs and CrAdapter plugins are staged next to sonycamd.
+install(TARGETS sonycam sonycamd RUNTIME DESTINATION bin)
 
 enable_testing()
 add_test(NAME cli_fake_mode

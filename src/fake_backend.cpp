@@ -118,6 +118,10 @@ FakeBackend::FakeBackend() {
                                        "timer_2s", "timer_5s", "timer_10s"}, true};
     props_["battery_level"] = {"87", {}, false};
     props_["priority_key"] = {"pc_remote", {"camera", "pc_remote"}, true};
+    props_["color_temp"] = {"5500", {}, true};
+    props_["file_format"] = {"jpeg", {"jpeg", "raw", "raw+jpeg", "heif"}, true};
+    props_["image_quality"] = {"fine", {"light", "standard", "fine",
+                                        "extra_fine"}, true};
 }
 
 Result FakeBackend::connect() {
@@ -144,9 +148,9 @@ Result FakeBackend::gearInfo(std::vector<PropInfo>& out) {
     out.push_back(PropInfo{"model", "FAKE ILCE-7CM2", false, {}});
     out.push_back(PropInfo{"body_serial", "0000001", false, {}});
     out.push_back(PropInfo{"body_firmware", "9.99", false, {}});
-    out.push_back(PropInfo{"lens", "FAKE FE 28-70mm F3.5-5.6 OSS", false, {}});
+    out.push_back(PropInfo{"lens", "FAKE FE PZ 28-135mm F4 G OSS", false, {}});
     out.push_back(PropInfo{"lens_firmware", "01", false, {}});
-    out.push_back(PropInfo{"remote_zoom", "no", false, {}});
+    out.push_back(PropInfo{"remote_zoom", "yes", false, {}});
     return Result::success();
 }
 
@@ -180,6 +184,13 @@ Result FakeBackend::setProp(const std::string& name, const std::string& value) {
     }
     it->second.value = value;
     return Result::success();
+}
+
+Result FakeBackend::zoom(const std::string& op, int) {
+    if (!connected_) return Result::fail("not connected");
+    if (op != "in" && op != "out" && op != "stop")
+        return Result::fail("unknown zoom op: " + op);
+    return Result::success();  // the fake lens is a power zoom
 }
 
 Result FakeBackend::record(const std::string& op, std::string& outState) {
