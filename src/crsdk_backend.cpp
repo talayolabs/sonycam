@@ -26,6 +26,8 @@ std::unique_ptr<CameraBackend> makeCrsdkBackend(std::string& error) {
 #include <thread>
 #include <vector>
 
+#include <arpa/inet.h>
+
 #ifdef __APPLE__
 #include <CoreFoundation/CoreFoundation.h>
 #include <IOKit/IOCFPlugIn.h>
@@ -894,7 +896,18 @@ public:
         if (sdkInit_) SCRSDK::Release();
     }
 
-    Result connect() override {
+    // Explicit connect: a target selects a network camera, an empty target
+    // resets to USB/auto discovery.
+    Result connect(const std::string& target) override {
+        if (target_ != target) {
+            target_ = target;
+            teardown();  // switching between USB and network targets
+        }
+        return connectMode(SCRSDK::CrSdkControlMode_Remote);
+    }
+
+    // Internal reconnects keep whatever target is active.
+    Result connect() {
         return connectMode(SCRSDK::CrSdkControlMode_Remote);
     }
 
@@ -929,25 +942,57 @@ public:
             if (!SCRSDK::Init()) return Result::fail("CrSDK Init() failed");
             sdkInit_ = true;
         }
-        SCRSDK::ICrEnumCameraObjectInfo* enumInfo = nullptr;
-        CrError err = SCRSDK::EnumCameraObjects(&enumInfo);
-        if (err != SCRSDK::CrError_None || !enumInfo || enumInfo->GetCount() == 0) {
-            if (enumInfo) enumInfo->Release();
-            return Result::fail(
-                "no camera found (is it on, in PC Remote mode, and connected via "
-                "USB/Wi-Fi?)");
+        if (!target_.empty()) {
+            // Direct network connection: "IP" or "IP/MAC".
+            std::string ipStr = target_, macStr;
+            auto slash = target_.find('/');
+            if (slash != std::string::npos) {
+                ipStr = target_.substr(0, slash);
+                macStr = target_.substr(slash + 1);
+            }
+            in_addr ip{};
+            if (inet_pton(AF_INET, ipStr.c_str(), &ip) != 1)
+                return Result::fail("invalid IP address: " + ipStr);
+            CrInt8u mac[6] = {0, 0, 0, 0, 0, 0};
+            if (!macStr.empty()) {
+                unsigned m[6];
+                if (std::sscanf(macStr.c_str(), "%x:%x:%x:%x:%x:%x", &m[0],
+                                &m[1], &m[2], &m[3], &m[4], &m[5]) != 6)
+                    return Result::fail("invalid MAC address: " + macStr);
+                for (int i = 0; i < 6; ++i) mac[i] = static_cast<CrInt8u>(m[i]);
+            }
+            CrError cerr = SCRSDK::CreateCameraObjectInfoEthernetConnection(
+                &camera_, SCRSDK::CrCameraDeviceModel_ILCE_7CM2, ip.s_addr, mac);
+            if (cerr != SCRSDK::CrError_None || !camera_)
+                return Result::fail("cannot create network camera object: " +
+                                    crErrorString(cerr));
+            model_ = "ILCE-7CM2";
+            transport_ = "wifi";
+        } else {
+            SCRSDK::ICrEnumCameraObjectInfo* enumInfo = nullptr;
+            CrError err = SCRSDK::EnumCameraObjects(&enumInfo);
+            if (err != SCRSDK::CrError_None || !enumInfo ||
+                enumInfo->GetCount() == 0) {
+                if (enumInfo) enumInfo->Release();
+                return Result::fail(
+                    "no camera found (is it on, in PC Remote mode, and "
+                    "connected via USB? For Wi-Fi use 'connect <camera-ip>')");
+            }
+            const SCRSDK::ICrCameraObjectInfo* found =
+                enumInfo->GetCameraObjectInfo(0);
+            camera_ = SCRSDK::CreateCameraObjectInfo(
+                found->GetName(), found->GetModel(), found->GetUsbPid(),
+                found->GetIdType(), found->GetIdSize(), found->GetId(),
+                found->GetConnectionTypeName(), found->GetAdaptorName(),
+                found->GetPairingNecessity(), found->GetSSHsupport());
+            model_ = reinterpret_cast<const char*>(found->GetModel());
+            transport_ =
+                reinterpret_cast<const char*>(found->GetConnectionTypeName());
+            for (auto& c : transport_) c = static_cast<char>(std::tolower(c));
+            enumInfo->Release();
+            if (!camera_) return Result::fail("CreateCameraObjectInfo failed");
         }
-        const SCRSDK::ICrCameraObjectInfo* found = enumInfo->GetCameraObjectInfo(0);
-        camera_ = SCRSDK::CreateCameraObjectInfo(
-            found->GetName(), found->GetModel(), found->GetUsbPid(),
-            found->GetIdType(), found->GetIdSize(), found->GetId(),
-            found->GetConnectionTypeName(), found->GetAdaptorName(),
-            found->GetPairingNecessity(), found->GetSSHsupport());
-        model_ = reinterpret_cast<const char*>(found->GetModel());
-        transport_ = reinterpret_cast<const char*>(found->GetConnectionTypeName());
-        for (auto& c : transport_) c = static_cast<char>(std::tolower(c));
-        enumInfo->Release();
-        if (!camera_) return Result::fail("CreateCameraObjectInfo failed");
+        CrError err;
 
         callback_.reset();
         err = SCRSDK::Connect(camera_, &callback_, &handle_, mode);
@@ -1928,6 +1973,7 @@ private:
     bool userDisconnected_ = false;
     bool connecting_ = false;
     SCRSDK::CrSdkControlMode mode_ = SCRSDK::CrSdkControlMode_Remote;
+    std::string target_;  // "" = USB/auto; "IP[/MAC]" = direct network
     SCRSDK::ICrCameraObjectInfo* camera_ = nullptr;
     SCRSDK::CrDeviceHandle handle_ = 0;
     Callback callback_;

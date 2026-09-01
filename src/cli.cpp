@@ -64,7 +64,8 @@ const char kUsage[] =
     "  liveview <out.jpg> [--follow [--frames N]]\n"
     "                             save a live-view frame; --follow streams frames\n"
     "                             (atomic overwrite) until ctrl-c or N frames\n"
-    "  connect | disconnect       manage the camera connection\n"
+    "  connect [IP[/MAC]]         connect (USB auto, or camera IP for Wi-Fi)\n"
+    "  disconnect                 release the camera connection\n"
     "  daemon stop                stop the background daemon\n"
     "  --ui [[HOST:]PORT]         serve a web UI (default 127.0.0.1:3000)\n"
     "\n"
@@ -452,8 +453,15 @@ int main(int argc, char** argv) {
     json req;
     if (cmd == "--ui") {
         req = {{"cmd", "ping"}};
+    } else if (cmd == "connect") {
+        req = {{"cmd", "connect"}};
+        if (args.size() == 2) req["ip"] = args[1];
+        else if (args.size() > 2) {
+            std::fprintf(stderr, "usage: sonycam connect [IP[/MAC]]\n");
+            return 2;
+        }
     } else if (cmd == "status" || cmd == "info" || cmd == "props" ||
-        cmd == "connect" || cmd == "disconnect") {
+        cmd == "disconnect") {
         req = {{"cmd", cmd}};
     } else if (cmd == "get") {
         if (args.size() != 2) { std::fprintf(stderr, "usage: sonycam get <prop>\n"); return 2; }

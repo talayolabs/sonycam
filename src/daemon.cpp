@@ -52,7 +52,7 @@ json handle(CameraBackend& cam, const json& req, bool& shutdown) {
         shutdown = true;
         resp["result"] = "bye";
     } else if (cmd == "connect") {
-        r = cam.connect();
+        r = cam.connect(req.value("ip", ""));
     } else if (cmd == "disconnect") {
         r = cam.disconnect();
     } else if (cmd == "status") {

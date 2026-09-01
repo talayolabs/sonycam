@@ -51,7 +51,9 @@ sonycam liveview <out.jpg>        save one live-view frame (fast, no shutter)
 sonycam liveview <out.jpg> --follow [--frames N]
                                   stream frames (atomic overwrite) until ctrl-c/N
 sonycam --version                 print the CLI version
-sonycam connect | disconnect      manage the camera connection
+sonycam connect [IP[/MAC]]        connect (USB auto; IP for Wi-Fi — see BACKLOG
+                                  11b: needs one-time camera-side setup)
+sonycam disconnect                release the connection (sticky until connect)
 sonycam daemon stop               stop the background daemon
 ```
 
