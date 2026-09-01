@@ -996,6 +996,102 @@ public:
             return Result::success();
         }
 
+        if (op == "position") {
+            CrDeviceProperty* props = nullptr;
+            CrInt32 num = 0;
+            CrInt32u code = SCRSDK::CrDeviceProperty_FocusPositionSetting;
+            CrError err = SCRSDK::GetSelectDeviceProperties(
+                handle_, 1, &code, &props, &num);
+            if (err != SCRSDK::CrError_None || num == 0 || !props) {
+                if (props) SCRSDK::ReleaseDeviceProperties(handle_, props);
+                return Result::fail(
+                    "absolute focus positioning is not supported here");
+            }
+            SCRSDK::CrDataType valueType = props[0].GetValueType();
+            bool writable = props[0].IsSetEnableCurrentValue();
+            std::uint16_t rangeMin = 0, rangeMax = 0;
+            {
+                CrInt8u* values = props[0].GetValues();
+                if (values && props[0].GetValueSize() >= 4) {
+                    std::memcpy(&rangeMin, values, 2);
+                    std::memcpy(&rangeMax, values + 2, 2);
+                }
+            }
+            SCRSDK::ReleaseDeviceProperties(handle_, props);
+
+            std::uint64_t cur = 0;
+            readNumericProp(SCRSDK::CrDeviceProperty_FocusPositionCurrentValue,
+                            cur);
+            if (steps < 0) {  // read-only query
+                outStatus = "position " + std::to_string(cur) + " (range " +
+                            std::to_string(rangeMin) + ".." +
+                            std::to_string(rangeMax) + ")";
+                return Result::success();
+            }
+            if (!writable)
+                return Result::fail(
+                    "focus position is not settable in the current mode "
+                    "(set focus_mode mf)");
+            if (steps < rangeMin || steps > rangeMax)
+                return Result::fail(
+                    "position out of range " + std::to_string(rangeMin) +
+                    ".." + std::to_string(rangeMax));
+
+            const std::uint64_t target = static_cast<std::uint64_t>(steps);
+            const std::uint64_t start = cur;
+            auto diff = [](std::uint64_t a, std::uint64_t b) {
+                return a > b ? a - b : b - a;
+            };
+            if (start == target) {
+                outStatus = "position " + std::to_string(cur);
+                return Result::success();
+            }
+            // FocusDrivingStatus lags reality, so treat the position itself
+            // as ground truth: wait until it converges on the target,
+            // re-issuing the (occasionally dropped) drive request on stall.
+            auto issue = [&]() {
+                CrDeviceProperty p;
+                p.SetCode(code);
+                p.SetValueType(valueType);
+                p.SetCurrentValue(target);
+                return SCRSDK::SetDeviceProperty(handle_, &p);
+            };
+            err = issue();
+            if (err != SCRSDK::CrError_None)
+                return Result::fail("set focus position failed: " +
+                                    crErrorString(err));
+            std::uint64_t last = start;
+            int stall = 0, resends = 0;
+            for (int i = 0; i < 300; ++i) {  // up to 30s of lens travel
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                if (!readNumericProp(
+                        SCRSDK::CrDeviceProperty_FocusPositionCurrentValue,
+                        cur))
+                    continue;
+                if (diff(cur, target) <= 200) break;  // arrived
+                if (cur == last) {
+                    if (++stall >= 15) {  // 1.5s without movement
+                        if (resends >= 2) break;  // physical limit reached
+                        issue();
+                        ++resends;
+                        stall = 0;
+                    }
+                } else {
+                    stall = 0;
+                    last = cur;
+                }
+            }
+            readNumericProp(SCRSDK::CrDeviceProperty_FocusPositionCurrentValue,
+                            cur);
+            outStatus = "position " + std::to_string(cur);
+            if (diff(cur, target) > 2000)
+                return Result::fail(
+                    "lens stopped at " + std::to_string(cur) + " instead of " +
+                    std::to_string(target) +
+                    " (probably a physical focus limit at this zoom)");
+            return Result::success();
+        }
+
         if (op == "near" || op == "far") {
             CrDeviceProperty* props = nullptr;
             CrInt32 num = 0;

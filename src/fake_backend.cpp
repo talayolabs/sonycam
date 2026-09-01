@@ -222,6 +222,21 @@ Result FakeBackend::focus(const std::string& op, int steps, std::string& outStat
         outStatus = op + " x" + std::to_string(steps);
         return Result::success();
     }
+    if (op == "position") {
+        if (steps < 0) {
+            outStatus = "position " + std::to_string(focusPos_) +
+                        " (range 0..1000)";
+            return Result::success();
+        }
+        if (mode != "mf")
+            return Result::fail(
+                "focus position is not settable in the current mode "
+                "(set focus_mode mf)");
+        if (steps > 1000) return Result::fail("position out of range 0..1000");
+        focusPos_ = steps;
+        outStatus = "position " + std::to_string(focusPos_);
+        return Result::success();
+    }
     return Result::fail("unknown focus op: " + op);
 }
 

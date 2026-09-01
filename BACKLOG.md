@@ -9,10 +9,13 @@ M = an afternoon, L = larger.
 | # | Item | Effort | Why |
 |---|------|--------|-----|
 | 11b | **Wi-Fi validation** — transport reporting is real now, but only USB is hardware-tested | M | Needs camera Wi-Fi pairing. |
-| 16 | **Absolute focus positioning** (`FocusPositionSetting`) | M | near/far nudges work; absolute would be better for agents. |
+| 17 | **AF area positioning by coordinates** (`AF_Area_Position`) — touch-to-focus at liveview x/y | M | Pairs well with agent vision loops. |
 
 ## Done (this effort)
 
+- #16 Absolute focus positioning: `focus position [V]` with
+  position-convergence waiting and stall/limit detection
+- CI: bumped actions (checkout v7, upload-artifact v7, download-artifact v8)
 - v0.3.0 batch: #7 file_format/image_quality props, #8 color_temp kelvin
   (+ range display `min..max step X`), #9 `liveview --follow/--frames`
   with atomic frame writes, #10 `zoom in/out/stop` (gated on

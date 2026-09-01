@@ -30,6 +30,7 @@ public:
 private:
     bool connected_ = false;
     bool recording_ = false;
+    int focusPos_ = 500;
     int captureCount_ = 0;
     int liveviewCount_ = 0;
     struct FakeProp {

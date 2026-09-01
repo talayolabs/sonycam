@@ -104,8 +104,14 @@ check_fails "focus near refused in AF mode" "$SONYCAM" focus near
 check "set focus_mode mf" "$SONYCAM" set focus_mode mf
 check_output "focus near nudges in MF mode" "focus: near x3" "$SONYCAM" focus near 3
 check_fails "focus af refused in MF mode" "$SONYCAM" focus af
+check_output "focus position read" "focus: position 500 (range 0..1000)" \
+  "$SONYCAM" focus position
+check_output "focus position set" "focus: position 250" \
+  "$SONYCAM" focus position 250
+check_fails "focus position out of range" "$SONYCAM" focus position 5000
 check_fails "focus rejects bad op" "$SONYCAM" focus sideways
 check "restore focus_mode af_s" "$SONYCAM" set focus_mode af_s
+check_fails "focus position set refused in AF mode" "$SONYCAM" focus position 300
 
 # --- movie recording ---
 check_output "record status idle" "record: not_recording" "$SONYCAM" record status

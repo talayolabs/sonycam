@@ -21,6 +21,7 @@ sonycam set shutter_speed 1/250
 sonycam set white_balance daylight
 sonycam focus af                  # autofocus, waits for lock
 sonycam focus near 5              # manual-focus nudge (focus_mode mf)
+sonycam focus position 30000      # drive to an absolute focus position
 sonycam record start              # movie recording (movie mode)
 sonycam zoom in 500               # power zoom (PZ lenses)
 sonycam capture --dir ~/photos    # trigger the shutter
@@ -231,8 +232,8 @@ Reference material (not dependencies): [crsdk.app property docs](https://crsdk.a
 - Wi-Fi: `status` reports the real transport, but only USB has been
   hardware-tested.
 - Capture downloads the JPEG rendition; RAW files stay on the memory card.
-- Not exposed yet (SDK supports them): absolute focus positioning, FTP
-  transfer, custom white-balance capture.
+- Not exposed yet (SDK supports them): FTP transfer, custom white-balance
+  capture, AF area positioning by coordinates.
 - Value codecs for shutter/ISO/EV follow the SDK header conventions; exact
   accepted values depend on the camera mode (e.g. aperture is not writable
   in S mode, most exposure props are locked in full Auto).

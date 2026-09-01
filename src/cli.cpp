@@ -48,6 +48,7 @@ const char kUsage[] =
     "  set <prop> <value>         write one property (e.g. set iso 800)\n"
     "  focus af                   autofocus (half-press), waits for lock\n"
     "  focus near|far [N]         manual-focus nudge N steps (needs focus_mode mf)\n"
+    "  focus position [V]         read or drive to an absolute focus position\n"
     "  focus status               current focus indication\n"
     "  record start|stop|status   movie recording (camera must be in a movie mode)\n"
     "  zoom in|out [MS] | stop    power zoom for MS milliseconds (PZ lenses only)\n"
@@ -438,13 +439,20 @@ int main(int argc, char** argv) {
         req = {{"cmd", "set"}, {"prop", args[1]}, {"value", args[2]}};
     } else if (cmd == "focus") {
         if (args.size() < 2 || args.size() > 3) {
-            std::fprintf(stderr, "usage: sonycam focus af|near|far|status [steps]\n");
+            std::fprintf(stderr,
+                         "usage: sonycam focus af|near|far|position|status "
+                         "[value]\n");
             return 2;
         }
-        int steps = 1;
+        int steps = args[1] == "position" ? -1 : 1;
         if (args.size() == 3) {
-            try { steps = std::stoi(args[2]); } catch (...) { steps = 0; }
-            if (steps < 1 || steps > 100) {
+            try { steps = std::stoi(args[2]); } catch (...) { steps = -1; }
+            if (args[1] == "position") {
+                if (steps < 0 || steps > 65535) {
+                    std::fprintf(stderr, "position must be 0-65535\n");
+                    return 2;
+                }
+            } else if (steps < 1 || steps > 100) {
                 std::fprintf(stderr, "steps must be 1-100\n");
                 return 2;
             }

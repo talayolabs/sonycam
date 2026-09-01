@@ -29,6 +29,9 @@ sonycam get <prop>                one property, includes valid choices
 sonycam set <prop> <value>        change a property, verifies the camera applied it
 sonycam focus af                  autofocus (half-press), waits for lock, reports state
 sonycam focus near|far [N]        manual-focus nudge N steps (requires focus_mode mf)
+sonycam focus position            read absolute focus position + valid range
+sonycam focus position <V>        drive the lens to position V (requires mf);
+                                  waits for arrival and reports the final position
 sonycam focus status              current focus indication (unlocked/focused/tracking)
 sonycam record start|stop|status  movie recording (camera must be in a movie mode)
 sonycam zoom in|out [MS] | stop   power zoom (fails cleanly on mechanical lenses)
@@ -140,6 +143,9 @@ shown as hex and can be passed back to `set` verbatim.
 - `focus af` fails with "did not lock": add light, aim at higher contrast,
   try `set focus_area center`, or fall back to mf + `focus near/far` while
   checking liveview frames.
+- `focus position` is the best MF workflow: read the current position once,
+  then binary-search positions with liveview frames to focus by eye.
+  Lower values = nearer. "lens stopped at X" means a physical focus limit.
 - Ranges print as `min..max step X` in choices (e.g. color_temp
   `2500K..9900K step 100K`).
 - Even with `file_format raw` or `raw+jpeg`, the file downloaded by

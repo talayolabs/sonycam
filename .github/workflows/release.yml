@@ -19,7 +19,7 @@ jobs:
             artifact: sonycam-linux-x86_64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build
@@ -31,7 +31,7 @@ jobs:
           mkdir -p dist/${{ matrix.artifact }}
           cp build/sonycam build/sonycamd README.md dist/${{ matrix.artifact }}/
           tar -C dist -czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
@@ -40,7 +40,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           merge-multiple: true
       - name: Create GitHub release
